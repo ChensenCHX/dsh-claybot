@@ -1,2 +1,11 @@
 # 计划/草稿目录，不进版本库
 /plans/
+
+# 依赖
+node_modules/
+
+# 本地构建/下载物；下载依赖放 ~/.dsh/claybot 下
+vendor/
+*.zip
+*.tar.gz
+*.log

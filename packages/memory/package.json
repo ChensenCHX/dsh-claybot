@@ -1,0 +1,29 @@
+{
+  "name": "dsh-claybot-memory",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "ClayBot memory subsystem: portable PostgreSQL service, roles, console API",
+  "main": "./lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "cordis.patch.yml",
+    "package.json"
+  ],
+  "dsh": {
+    "manifestVersion": 1,
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "pg": "8.23.1"
+  }
+}

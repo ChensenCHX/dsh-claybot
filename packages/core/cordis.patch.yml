@@ -1,0 +1,4 @@
+# dsh-claybot core bundle patch
+- insert:
+    - id: claybot-core
+      name: 'dsh-claybot'

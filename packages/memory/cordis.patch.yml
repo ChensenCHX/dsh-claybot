@@ -1,0 +1,4 @@
+# dsh-claybot-memory bundle patch
+- insert:
+    - id: claybot-memory
+      name: 'dsh-claybot-memory'
