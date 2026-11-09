@@ -36,6 +36,14 @@ export function buildDir() {
   return path.join(dbRoot(), 'build')
 }
 
+export function settingsPath() {
+  return path.join(dbRoot(), 'settings.json')
+}
+
+export function backupsDir() {
+  return path.join(stateDir(), 'backups')
+}
+
 export function logsDir() {
   return path.join(dbRoot(), 'logs')
 }
@@ -78,6 +86,14 @@ export function writeJson(file, value, mode = 0o600) {
   const tmp = file + '.tmp-' + process.pid + '-' + Date.now()
   fs.writeFileSync(tmp, JSON.stringify(value, null, 2), { mode })
   fs.renameSync(tmp, file)
+}
+
+export function readSettings() {
+  return readJson(settingsPath(), {})
+}
+
+export function writeSettings(value) {
+  writeJson(settingsPath(), value)
 }
 
 export function readConfig() {

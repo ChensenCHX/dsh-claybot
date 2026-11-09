@@ -93,6 +93,10 @@ window.__ModuleLoader__.load({
       '.cb-error{color:var(--dsw-alias-state-error-primary,#f87171);font-size:12px;white-space:pre-wrap;overflow-wrap:anywhere}',
       '.cb-textarea{width:100%;min-height:112px;resize:vertical;background:var(--dsw-alias-bg-layer-2,rgba(127,127,127,.08));border:1px solid var(--dsw-alias-border-l1,rgba(127,127,127,.22));border-radius:8px;color:var(--dsw-alias-label-primary,#e8e8e8);padding:8px;font-family:var(--dsw-font-family-mono,ui-monospace,SFMono-Regular,Menlo,Consolas,monospace);font-size:11px;line-height:1.5}',
       '.cb-select{background:var(--dsw-alias-bg-layer-2,rgba(127,127,127,.08));color:var(--dsw-alias-label-primary,#e8e8e8);border:1px solid var(--dsw-alias-border-l1,rgba(127,127,127,.22));border-radius:8px;padding:4px 6px;font:inherit;font-size:11px}',
+      '.cb-input{width:100%;box-sizing:border-box;background:var(--dsw-alias-bg-layer-2,rgba(127,127,127,.08));color:var(--dsw-alias-label-primary,#e8e8e8);border:1px solid var(--dsw-alias-border-l1,rgba(127,127,127,.22));border-radius:8px;padding:6px 8px;font:inherit;font-size:11px}',
+      '.cb-input:focus{outline:none;border-color:var(--dsw-alias-brand-primary,#3b82f6)}',
+      '.cb-form-row{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:8px}',
+      '.cb-form-row .cb-input{flex:1;min-width:150px}',
       '.cb-sql-actions{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:8px}',
       '.cb-check{display:inline-flex;align-items:center;gap:5px;color:var(--dsw-alias-label-secondary,#9a9a9a);font-size:11px}',
       '.cb-result{margin-top:8px}',
@@ -736,6 +740,172 @@ window.__ModuleLoader__.load({
       )
     }
 
+    function ComponentsPage() {
+      var dataState = useState(null)
+      var data = dataState[0]
+      var setData = dataState[1]
+      var loadErrorState = useState('')
+      var loadError = loadErrorState[0]
+      var setLoadError = loadErrorState[1]
+      var actionErrorState = useState('')
+      var actionError = actionErrorState[0]
+      var setActionError = actionErrorState[1]
+      var noticeState = useState('')
+      var notice = noticeState[0]
+      var setNotice = noticeState[1]
+      var dirState = useState('')
+      var dir = dirState[0]
+      var setDir = dirState[1]
+      var checkingState = useState(false)
+      var checking = checkingState[0]
+      var setChecking = checkingState[1]
+      var savingState = useState(false)
+      var saving = savingState[0]
+      var setSaving = savingState[1]
+      var backingUpState = useState(false)
+      var backingUp = backingUpState[0]
+      var setBackingUp = backingUpState[1]
+      var autoCheckedState = useState(false)
+      var autoChecked = autoCheckedState[0]
+      var setAutoChecked = autoCheckedState[1]
+
+      var load = useCallback(function () {
+        return request('/components')
+          .then(function (value) {
+            setData(value)
+            setDir(function (previous) { return previous || value.backupDir || '' })
+            setLoadError('')
+          })
+          .catch(function (failure) { setLoadError(failure.message) })
+      }, [])
+
+      useEffect(function () {
+        load()
+      }, [load])
+
+      useEffect(function () {
+        if (!data || autoChecked) return
+        setAutoChecked(true)
+        checkUpdates(true)
+      }, [data, autoChecked])
+
+      function checkUpdates(silent) {
+        setChecking(true)
+        if (!silent) {
+          setActionError('')
+          setNotice('')
+        }
+        request('/components/check', { method: 'POST' })
+          .then(function () {
+            if (!silent) setNotice('版本检查完成')
+            return load()
+          })
+          .catch(function (failure) { setActionError(failure.message) })
+          .then(function () { setChecking(false) })
+      }
+
+      function saveBackupDir() {
+        setSaving(true)
+        setActionError('')
+        setNotice('')
+        request('/backups/settings', { method: 'PUT', body: { dir: dir } })
+          .then(function (value) {
+            setDir(value.backupDir)
+            setNotice('备份目录已保存')
+            return load()
+          })
+          .catch(function (failure) { setActionError(failure.message) })
+          .then(function () { setSaving(false) })
+      }
+
+      function backupNow() {
+        setBackingUp(true)
+        setActionError('')
+        setNotice('')
+        request('/backups', { method: 'POST', body: { confirm: true } })
+          .then(function (value) {
+            setNotice('备份完成：' + value.file + '（' + formatBytes(value.size) + '）')
+            return load()
+          })
+          .catch(function (failure) { setActionError(failure.message) })
+          .then(function () { setBackingUp(false) })
+      }
+
+      if (!data && loadError) {
+        return h(Card, { title: '组件与备份', right: h(Chip, { tone: 'err' }, '不可用') }, h('div', { className: 'cb-error' }, loadError))
+      }
+      if (!data) {
+        return h(Card, { title: '组件与备份' }, h('div', { className: 'cb-empty' }, '加载中…'))
+      }
+
+      var components = data.components || []
+      var backups = data.backups || []
+      var componentRows = components.map(function (component) {
+        var statusChip = component.error
+          ? h(Chip, { tone: 'err' }, '检查失败')
+          : component.updateAvailable
+            ? h(Chip, { tone: 'warn' }, '可更新')
+            : h(Chip, { tone: 'ok' }, '已是最新')
+        return h(
+          'div',
+          { className: 'cb-list-row', key: component.id },
+          h('div', { className: 'cb-list-main' },
+            h(Dot, { tone: component.updateAvailable ? 'warn' : 'ok' }),
+            h('span', { className: 'cb-code' }, component.name),
+            h('span', { className: 'cb-card-sub' },
+              '已安装 ' + (component.installedVersion || '—') + ' · 最新 ' + (component.latestVersion || '未检查'),
+            ),
+          ),
+          h('div', { className: 'cb-list-side' }, statusChip),
+        )
+      })
+
+      var backupRows = backups.length === 0
+        ? [h('div', { className: 'cb-empty', key: 'empty' }, '还没有备份。')]
+        : backups.map(function (item) {
+            return h(
+              'div',
+              { className: 'cb-list-row', key: item.path },
+              h('div', { className: 'cb-list-main' },
+                h(Dot, { tone: 'ok' }),
+                h('span', { className: 'cb-code' }, item.name),
+              ),
+              h('div', { className: 'cb-list-side' }, formatBytes(item.size) + ' · ' + new Date(item.modifiedAt).toLocaleString()),
+            )
+          })
+
+      return h('div', null,
+        actionError ? h(Banner, { tone: 'error' }, actionError) : null,
+        notice ? h(Banner, null, notice) : null,
+        h(Card, {
+          title: '组件',
+          sub: '自动检查版本；更新需手动，不会自动 upgrade',
+          right: h('button', { type: 'button', className: 'cb-btn', disabled: checking, onClick: function () { checkUpdates(false) } }, checking ? '检查中…' : '检查更新'),
+        }, componentRows),
+        h(Card, {
+          title: '备份',
+          sub: data.running ? null : '数据库未运行',
+          right: h('button', { type: 'button', className: 'cb-btn primary', disabled: backingUp || !data.running, onClick: backupNow }, backingUp ? '备份中…' : '立即备份'),
+        },
+          h('div', { className: 'cb-form-row' },
+            h('input', {
+              className: 'cb-input',
+              value: dir,
+              spellCheck: false,
+              placeholder: '备份目录（绝对路径）',
+              onChange: function (event) { setDir(event.target.value) },
+            }),
+            h('button', { type: 'button', className: 'cb-btn', disabled: saving, onClick: saveBackupDir }, saving ? '保存中…' : '保存目录'),
+          ),
+          h('div', { className: 'cb-card-sub', style: { marginTop: 6, whiteSpace: 'normal' } },
+            '备份目录可自定义；只有手动点击「立即备份」才会执行，不会自动备份。',
+          ),
+          h('div', { className: 'cb-section-label' }, '备份文件'),
+          backupRows,
+        ),
+      )
+    }
+
     function DatabasePage() {
       var statusState = useStatus()
       var status = statusState.status
@@ -832,6 +1002,7 @@ window.__ModuleLoader__.load({
         ['overview', '概览'],
         ['connections', '连接'],
         ['sql', 'SQL Prompt'],
+        ['components', '组件'],
       ]
       var overview = []
       overview.push(h(StatusHero, {
@@ -904,6 +1075,7 @@ window.__ModuleLoader__.load({
         page === 'overview' ? h('div', null, overview) : null,
         page === 'connections' ? h('div', null, connectionsPage) : null,
         page === 'sql' ? h(SqlPanel, { status: status }) : null,
+        page === 'components' ? h(ComponentsPage) : null,
       )
     }
 

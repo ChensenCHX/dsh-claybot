@@ -40,7 +40,7 @@ function queryParam(request, name) {
   return new URL(request.url).searchParams.get(name)
 }
 
-export function registerRoutes(ctx, db) {
+export function registerRoutes(ctx, db, maintenance) {
   const routes = [
     {
       path: PREFIX + '/status',
@@ -97,6 +97,37 @@ export function registerRoutes(ctx, db) {
       path: PREFIX + '/connections',
       methods: ['GET'],
       handler: async () => json(await db.connections()),
+    },
+    {
+      path: PREFIX + '/components',
+      methods: ['GET'],
+      handler: async () => json(await maintenance.status()),
+    },
+    {
+      path: PREFIX + '/components/check',
+      methods: ['POST'],
+      handler: async () => json(await maintenance.check()),
+    },
+    {
+      path: PREFIX + '/backups',
+      methods: ['GET', 'POST'],
+      handler: async (request) => {
+        if (request.method === 'GET') {
+          return json({ backupDir: maintenance.settings().backupDir, backups: maintenance.listBackups() })
+        }
+        const body = await readJson(request)
+        if (body.confirm !== true) throw Object.assign(new Error('backup requires confirm: true'), { status: 400 })
+        return json(await maintenance.backup())
+      },
+    },
+    {
+      path: PREFIX + '/backups/settings',
+      methods: ['PUT'],
+      handler: async (request) => {
+        const body = await readJson(request)
+        const settings = maintenance.saveBackupDir(body.dir)
+        return json({ ok: true, backupDir: settings.backupDir, backups: maintenance.listBackups() })
+      },
     },
     {
       path: PREFIX + '/query',

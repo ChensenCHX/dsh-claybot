@@ -130,7 +130,7 @@ export function sha256File(file) {
   return createHash('sha256').update(fs.readFileSync(file)).digest('hex')
 }
 
-function curlExecutable() {
+export function curlExecutable() {
   if (process.platform === 'win32') {
     const candidate = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'curl.exe')
     if (fs.existsSync(candidate)) return candidate
@@ -138,7 +138,7 @@ function curlExecutable() {
   return 'curl'
 }
 
-function detectHttpProxy() {
+export function detectHttpProxy() {
   for (const name of ['HTTPS_PROXY', 'https_proxy', 'HTTP_PROXY', 'http_proxy', 'ALL_PROXY', 'all_proxy']) {
     const value = process.env[name]
     if (typeof value === 'string' && value.length > 0) return value
