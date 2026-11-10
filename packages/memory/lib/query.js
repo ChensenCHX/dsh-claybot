@@ -44,6 +44,10 @@ export function allowedConsoleRole(role) {
 }
 
 export async function runSql({ port, credentials, role, sql }) {
+  return runSqlParams({ port, credentials, role, sql, values: [] })
+}
+
+export async function runSqlParams({ port, credentials, role, sql, values = [] }) {
   if (!allowedConsoleRole(role)) throw new Error('role is not allowed: ' + String(role))
   if (typeof sql !== 'string' || sql.trim().length === 0) throw new Error('SQL is empty')
   if (sql.length > MAX_SQL_LENGTH) throw new Error('SQL is too long (max ' + String(MAX_SQL_LENGTH) + ' chars)')
@@ -54,7 +58,7 @@ export async function runSql({ port, credentials, role, sql }) {
   })
   await client.connect()
   try {
-    const raw = await client.query(sql)
+    const raw = await client.query(sql, values)
     const results = Array.isArray(raw) ? raw : [raw]
     return {
       results: results.map((result) => {

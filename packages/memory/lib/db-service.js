@@ -7,7 +7,7 @@ import {
   startInstalled,
   stopInstalled,
 } from './installer.js'
-import { allowedConsoleRole, readCatalog, readConnections, runSql } from './query.js'
+import { allowedConsoleRole, readCatalog, readConnections, runSql, runSqlParams } from './query.js'
 import { passwordForRole, userForRole } from './roles.js'
 import { readConfig, readCredentials } from './paths.js'
 
@@ -138,6 +138,12 @@ export class DbService {
     if (!this.installed) throw new Error('database is not installed')
     if (this.credentials === null) throw new Error('database credentials are missing')
     return runSql({ port: this.config.port, credentials: this.credentials, role, sql })
+  }
+
+  async queryParams(role, sql, values = []) {
+    if (!this.installed) throw new Error('database is not installed')
+    if (this.credentials === null) throw new Error('database credentials are missing')
+    return runSqlParams({ port: this.config.port, credentials: this.credentials, role, sql, values })
   }
 
   async catalog() {

@@ -3,7 +3,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { spawnSync } from 'node:child_process'
 
-import { inferenceConfigPath } from './paths.js'
+import { inferenceConfigPath, resolveStatePath, toStateRelative } from './paths.js'
 
 const MODES = ['remote', 'llama']
 const BACKENDS = ['auto', 'cpu', 'cuda', 'vulkan']
@@ -104,7 +104,7 @@ function normalizeConfig(input, current) {
       batchSize: asInteger(remoteInput.batchSize, 'embedding.remote.batchSize', base.embedding.remote.batchSize, 1, 512),
     },
     llama: {
-      model: asString(llamaInput.model, 'embedding.llama.model', base.embedding.llama.model),
+      model: toStateRelative(asString(llamaInput.model, 'embedding.llama.model', base.embedding.llama.model)),
       backend: asEnum(llamaInput.backend, 'embedding.llama.backend', BACKENDS, base.embedding.llama.backend),
       gpuLayers: asInteger(llamaInput.gpuLayers, 'embedding.llama.gpuLayers', base.embedding.llama.gpuLayers, 0, 999),
       contextSize: asInteger(llamaInput.contextSize, 'embedding.llama.contextSize', base.embedding.llama.contextSize, 128, 1048576),
@@ -204,6 +204,7 @@ export class ConfigService {
   read() {
     const config = readInternal()
     const masked = maskConfig(config)
+    masked.embedding.llama.model = toStateRelative(masked.embedding.llama.model)
     return {
       schemaVersion: 1,
       embedding: masked.embedding,
@@ -213,7 +214,14 @@ export class ConfigService {
   }
 
   embeddingInternal() {
-    return readInternal().embedding
+    const embedding = readInternal().embedding
+    return {
+      ...embedding,
+      llama: {
+        ...embedding.llama,
+        model: resolveStatePath(embedding.llama.model),
+      },
+    }
   }
 
   save(input) {
@@ -234,6 +242,7 @@ export class ConfigService {
     const config = readInternal()
     const includeSecrets = options.includeSecrets === true
     const sheetConfig = maskConfig(config)
+    sheetConfig.embedding.llama.model = toStateRelative(sheetConfig.embedding.llama.model)
     if (includeSecrets) {
       sheetConfig.embedding.remote.apiKey = config.embedding.remote.apiKey
       delete sheetConfig.embedding.remote.hasApiKey

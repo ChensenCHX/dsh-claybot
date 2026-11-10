@@ -15,6 +15,7 @@ window.__ModuleLoader__.load({
     var API = '/api/claybot/db'
     var CONFIG_API = '/api/claybot'
     var EMBEDDING_API = '/api/claybot/embedding'
+    var MEMORY_API = '/api/claybot/memory'
     var MAX_ROWS = 500
 
     var CSS = [
@@ -83,6 +84,12 @@ window.__ModuleLoader__.load({
       '.cb-ring-row{display:grid;grid-template-columns:auto auto;gap:2px 8px;font-size:10px;align-items:baseline}',
       '.cb-ring-key{color:var(--dsw-alias-label-tertiary,#8b8b8b);text-align:left}',
       '.cb-ring-val{color:var(--dsw-alias-label-primary,#e8e8e8);text-align:right;font-variant-numeric:tabular-nums}',
+      '.cb-modal-backdrop{position:fixed;inset:0;z-index:120;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;padding:18px}',
+      '.cb-modal{width:min(440px,100%);background:var(--dsw-alias-bg-layer-1,#1b1b1b);border:1px solid var(--dsw-alias-border-l2,rgba(127,127,127,.32));border-radius:14px;box-shadow:0 18px 60px rgba(0,0,0,.45);padding:16px}',
+      '.cb-modal-title{font-size:14px;font-weight:650;margin-bottom:8px}',
+      '.cb-modal-copy{font-size:12px;line-height:1.65;color:var(--dsw-alias-label-secondary,#b0b0b0);display:grid;gap:6px}',
+      '.cb-modal-copy strong{color:var(--dsw-alias-label-primary,#e8e8e8);font-weight:600}',
+      '.cb-modal-actions{display:flex;justify-content:flex-end;gap:6px;flex-wrap:wrap;margin-top:14px}',
       '.cb-kv{display:grid;grid-template-columns:82px minmax(0,1fr);gap:5px 10px;font-size:12px;align-items:baseline}',
       '.cb-kv-label{color:var(--dsw-alias-label-tertiary,#8b8b8b);font-size:11px}',
       '.cb-kv-value{min-width:0;overflow-wrap:anywhere}',
@@ -183,6 +190,10 @@ window.__ModuleLoader__.load({
 
     function embeddingRequest(path, options) {
       return requestFrom(EMBEDDING_API, path, options)
+    }
+
+    function memoryRequest(path, options) {
+      return requestFrom(MEMORY_API, path, options)
     }
 
     function inspectGguf(filePath) {
@@ -1279,6 +1290,52 @@ window.__ModuleLoader__.load({
       )
     }
 
+    function DimensionDialog(props) {
+      var prompt = props.prompt
+      if (!prompt) return null
+      var isModel = prompt.kind === 'model' || prompt.kind === 'gguf'
+      var current = Number(prompt.current)
+      var native = Number(prompt.native)
+      function dimensionEffect(target, modelDimensions) {
+        if (!Number.isFinite(modelDimensions) || modelDimensions <= 0) {
+          return '当前模型原生宽度未知（尚未成功探测），无法判断会截断还是补 0；建议先点「测试调用」看实际返回维度。'
+        }
+        if (target < modelDimensions) {
+          return '当前模型原生输出为 ' + String(modelDimensions) + ' 维；目标更小，会截断向量：只保留前 ' + String(target) + ' 维，丢弃后 ' + String(modelDimensions - target) + ' 维。如果模型不是按 MRL 训练的，检索质量可能明显下降。'
+        }
+        if (target > modelDimensions) {
+          return '当前模型原生输出为 ' + String(modelDimensions) + ' 维；目标更大，只会在末尾补 0（多出 ' + String(target - modelDimensions) + ' 维），不会增加语义信息，但存储和索引会更大。'
+        }
+        return '当前模型原生输出为 ' + String(modelDimensions) + ' 维，与目标维度一致，重嵌后使用完整输出。'
+      }
+      var body = isModel
+        ? [
+            h('p', { key: 'main' }, '模型原生输出为 ', h('strong', null, String(native) + ' 维'), '，当前 memory 向量维度为 ', h('strong', null, String(current) + ' 维'), '。'),
+            h('p', { key: 'effect' }, dimensionEffect(current, native)),
+            h('p', { key: 'keep' }, '保持当前维度：不会触发重嵌；新模型输出会按上面的规则适配到当前维度。'),
+            h('p', { key: 'change' }, '改用模型维度：保存后触发 memory schema migration，对所有条目全面重嵌并重建索引。'),
+          ]
+        : [
+            h('p', { key: 'main' }, '将向量维度从 ', h('strong', null, String(current) + ' 维'), ' 改为 ', h('strong', null, String(native) + ' 维'), '。'),
+            h('p', { key: 'model' }, prompt.modelDimensions
+              ? '当前模型原生输出：' + String(prompt.modelDimensions) + ' 维。'
+              : '当前模型原生输出：未知（尚未成功探测，或模型列表里没有这个模型的维度信息）。'),
+            h('p', { key: 'effect' }, dimensionEffect(native, prompt.modelDimensions)),
+            h('p', { key: 'change' }, '保存后会触发 memory schema migration，对所有条目全面重嵌并重建索引；迁移完成前向量召回会降级。'),
+          ]
+      return h('div', { className: 'cb-modal-backdrop', role: 'presentation' },
+        h('div', { className: 'cb-modal', role: 'dialog', 'aria-modal': 'true' },
+          h('div', { className: 'cb-modal-title' }, isModel ? '切换 embedding 模型' : '修改向量维度'),
+          h('div', { className: 'cb-modal-copy' }, body),
+          h('div', { className: 'cb-modal-actions' },
+            isModel ? h('button', { type: 'button', className: 'cb-btn', onClick: props.onKeep }, '保持 ' + String(current) + ' 维（补0/截断）') : null,
+            h('button', { type: 'button', className: 'cb-btn primary', onClick: props.onChange }, isModel ? '改为 ' + String(native) + ' 维并重嵌' : '确认修改并重嵌'),
+            h('button', { type: 'button', className: 'cb-btn ghost', onClick: props.onCancel }, '取消'),
+          ),
+        ),
+      )
+    }
+
     function embeddingMonitorInfo(monitor, mode) {
       var remote = mode === 'remote'
       if (!monitor) {
@@ -1539,6 +1596,12 @@ window.__ModuleLoader__.load({
       var probeBusyState = useState(false)
       var probeBusy = probeBusyState[0]
       var setProbeBusy = probeBusyState[1]
+      var dimensionPromptState = useState(null)
+      var dimensionPrompt = dimensionPromptState[0]
+      var setDimensionPrompt = dimensionPromptState[1]
+      var migrationBusyState = useState(false)
+      var migrationBusy = migrationBusyState[0]
+      var setMigrationBusy = migrationBusyState[1]
 
       var loadStatus = useCallback(function () {
         return embeddingRequest('/status')
@@ -1711,13 +1774,41 @@ window.__ModuleLoader__.load({
         }
       }
 
-      function saveConfig() {
+      function modelNativeDimensions() {
+        if (!draft) return null
+        if (draft.embedding.mode === 'llama') {
+          if (status && Number(status.modelDimensions) > 0) return Number(status.modelDimensions)
+          var modelPath = draft.embedding.llama && draft.embedding.llama.model
+          var catalogModel = (status && status.models || []).find(function (model) { return model.path === modelPath || model.relativePath === modelPath })
+          if (catalogModel && Number(catalogModel.dimensions) > 0) return Number(catalogModel.dimensions)
+        }
+        if (monitor && monitor.lastEmbedding && Number(monitor.lastEmbedding.nativeDimensions) > 0) {
+          return Number(monitor.lastEmbedding.nativeDimensions)
+        }
+        return null
+      }
+
+      function saveConfig(options) {
+        options = options || {}
+        var next = options.draft || draft
+        var currentDimensions = Number(config.embedding.dimensions)
+        var nextDimensions = Number(next.embedding.dimensions)
+        if (!options.skipDimensionPrompt && nextDimensions !== currentDimensions) {
+          setDimensionPrompt({
+            kind: 'dimensions',
+            current: currentDimensions,
+            native: nextDimensions,
+            modelDimensions: modelNativeDimensions(),
+            mode: next.embedding.mode,
+          })
+          return Promise.resolve({ skipped: true })
+        }
         setSaving(true)
         setError('')
         setNotice('')
         return configRequest('/config', {
           method: 'PUT',
-          body: { embedding: draft.embedding, device: draft.device, database: { backupDir: config.database.backupDir } },
+          body: { embedding: next.embedding, device: next.device, database: { backupDir: config.database.backupDir } },
         })
           .then(function (value) {
             setConfig(value)
@@ -1725,11 +1816,35 @@ window.__ModuleLoader__.load({
             setNotice('配置已保存')
             return loadStatus()
           })
+          .then(function () {
+            if (options.migrate) return startMigration(next.embedding.mode)
+            return null
+          })
           .catch(function (failure) {
             setError(failure.message)
             throw failure
           })
           .finally(function () { setSaving(false) })
+      }
+
+      function startMigration(mode) {
+        setMigrationBusy(true)
+        var restart = mode === 'llama' && status && status.installed
+          ? embeddingRequest('/action', { method: 'POST', body: { action: 'restart' } })
+          : Promise.resolve(null)
+        return restart
+          .then(function () {
+            return memoryRequest('/schema/migrations', { method: 'POST', body: { confirm: true } })
+          })
+          .then(function () {
+            setNotice(mode === 'llama' ? '配置已保存，embedding 服务已按新模型重启，向量重嵌已开始' : '配置已保存，向量重嵌已开始')
+            return loadStatus()
+          })
+          .catch(function (failure) {
+            setError('配置已保存，但 migration 启动失败：' + failure.message)
+            throw failure
+          })
+          .finally(function () { setMigrationBusy(false) })
       }
 
       function installRuntime() {
@@ -1757,26 +1872,68 @@ window.__ModuleLoader__.load({
           .finally(function () { setActionBusy(false) })
       }
 
-      function applyModelDefaults(model) {
-        update(['embedding', 'mode'], 'llama')
-        update(['embedding', 'llama', 'model'], model.path)
-        update(['embedding', 'dimensions'], model.dimensions)
-        update(['embedding', 'llama', 'pooling'], model.pooling)
-        if (model.contextSize) update(['embedding', 'llama', 'contextSize'], model.contextSize)
+      function applyModelDefaults(model, keepDimensions) {
+        var next = cloneJson(draft)
+        next.embedding.mode = 'llama'
+        next.embedding.llama.model = model.relativePath || model.path
+        if (!keepDimensions) next.embedding.dimensions = model.dimensions
+        next.embedding.llama.pooling = model.pooling
+        if (model.contextSize) next.embedding.llama.contextSize = model.contextSize
+        setDraft(next)
+        return next
       }
 
-      function applyGgufDefaults(metadata) {
-        if (metadata.dimensions && metadata.dimensions >= 1 && metadata.dimensions <= 4096) {
-          update(['embedding', 'dimensions'], metadata.dimensions)
+      function applyGgufDefaults(metadata, keepDimensions) {
+        var next = cloneJson(draft)
+        if (!keepDimensions && metadata.dimensions && metadata.dimensions >= 1 && metadata.dimensions <= 4096) {
+          next.embedding.dimensions = metadata.dimensions
         }
-        if (metadata.contextSize) update(['embedding', 'llama', 'contextSize'], metadata.contextSize)
-        if (metadata.pooling) update(['embedding', 'llama', 'pooling'], metadata.pooling)
+        if (metadata.contextSize) next.embedding.llama.contextSize = metadata.contextSize
+        if (metadata.pooling) next.embedding.llama.pooling = metadata.pooling
+        setDraft(next)
+        return next
+      }
+
+      function resolveDimensionPrompt(action) {
+        var prompt = dimensionPrompt
+        if (!prompt) return
+        setDimensionPrompt(null)
+        if (action === 'cancel') return
+        if (prompt.kind === 'model') {
+          if (action === 'keep') {
+            applyModelDefaults(prompt.model, true)
+            setNotice('已切换模型；保存后新向量会适配到 ' + String(prompt.current) + ' 维')
+            return
+          }
+          var modelDraft = applyModelDefaults(prompt.model, false)
+          saveConfig({ draft: modelDraft, skipDimensionPrompt: true, migrate: true }).catch(function () {})
+          return
+        }
+        if (prompt.kind === 'gguf') {
+          if (action === 'keep') {
+            applyGgufDefaults(prompt.metadata, true)
+            setNotice('已使用模型默认值；保存后新向量会适配到 ' + String(prompt.current) + ' 维')
+            return
+          }
+          var ggufDraft = applyGgufDefaults(prompt.metadata, false)
+          saveConfig({ draft: ggufDraft, skipDimensionPrompt: true, migrate: true }).catch(function () {})
+          return
+        }
+        if (prompt.kind === 'dimensions' && action === 'change') {
+          saveConfig({ skipDimensionPrompt: true, migrate: true }).catch(function () {})
+        }
       }
 
       function inspectModelPath(filePath) {
         if (typeof filePath !== 'string' || !/\.gguf$/i.test(filePath)) return
         inspectGguf(filePath)
           .then(function (metadata) {
+            var native = Number(metadata.dimensions)
+            var current = Number(draft.embedding.dimensions)
+            if (Number.isFinite(native) && native > 0 && native !== current) {
+              setDimensionPrompt({ kind: 'gguf', metadata: metadata, native: native, current: current })
+              return
+            }
             applyGgufDefaults(metadata)
             setNotice('已读取 GGUF 元数据：' + (metadata.architecture || 'unknown') + ' · ' + (metadata.dimensions || '?') + 'd · ctx ' + (metadata.maxContext || metadata.contextSize || '?') + (metadata.pooling ? ' · ' + metadata.pooling : ''))
           })
@@ -1786,6 +1943,12 @@ window.__ModuleLoader__.load({
       }
 
       function useModel(model) {
+        var native = Number(model.dimensions)
+        var current = Number(draft.embedding.dimensions)
+        if (Number.isFinite(native) && native > 0 && native !== current) {
+          setDimensionPrompt({ kind: 'model', model: model, native: native, current: current })
+          return
+        }
         applyModelDefaults(model)
         setNotice('已选择 ' + model.name + '：维度 / context / pooling 已按模型默认值带出，保存后生效')
       }
@@ -1796,10 +1959,14 @@ window.__ModuleLoader__.load({
         setNotice('')
         var action = status.running ? 'restart' : 'start'
         saveConfig()
-          .then(function () {
+          .then(function (result) {
+            if (result && result.skipped) return null
             return embeddingRequest('/action', { method: 'POST', body: { action: action } })
           })
-          .then(function () { return loadStatus() })
+          .then(function (result) {
+            if (result === null) return null
+            return loadStatus()
+          })
           .catch(function (failure) { setError(failure.message) })
           .finally(function () { setActionBusy(false) })
       }
@@ -1836,11 +2003,28 @@ window.__ModuleLoader__.load({
         var matched = (status.models || []).find(function (model) { return model.path === file.path || model.file === file.name })
         inspectGguf(file.path)
           .then(function (metadata) {
+            var native = Number(metadata.dimensions)
+            var current = Number(draft.embedding.dimensions)
+            if (Number.isFinite(native) && native > 0 && native !== current) {
+              setDimensionPrompt({ kind: 'gguf', metadata: metadata, native: native, current: current })
+              return
+            }
             applyGgufDefaults(metadata)
             setNotice('已读取 GGUF 元数据：' + (metadata.architecture || 'unknown') + ' · ' + (metadata.dimensions || '?') + 'd · ctx ' + (metadata.maxContext || metadata.contextSize || '?') + (metadata.pooling ? ' · ' + metadata.pooling : ''))
           })
           .catch(function () {
             if (matched) {
+              var native = Number(matched.dimensions)
+              var current = Number(draft.embedding.dimensions)
+              if (Number.isFinite(native) && native > 0 && native !== current) {
+                setDimensionPrompt({
+                  kind: 'gguf',
+                  metadata: { dimensions: matched.dimensions, contextSize: matched.contextSize, pooling: matched.pooling },
+                  native: native,
+                  current: current,
+                })
+                return
+              }
               update(['embedding', 'dimensions'], matched.dimensions)
               update(['embedding', 'llama', 'pooling'], matched.pooling)
               if (matched.contextSize) update(['embedding', 'llama', 'contextSize'], matched.contextSize)
@@ -1894,6 +2078,12 @@ window.__ModuleLoader__.load({
             onRefresh: loadMonitor,
             error: error,
           }),
+          dimensionPrompt ? h(DimensionDialog, {
+            prompt: dimensionPrompt,
+            onKeep: function () { resolveDimensionPrompt('keep') },
+            onChange: function () { resolveDimensionPrompt('change') },
+            onCancel: function () { resolveDimensionPrompt('cancel') },
+          }) : null,
         )
       }
       var remote = embedding.mode === 'remote'
@@ -2057,7 +2247,8 @@ window.__ModuleLoader__.load({
                   h('span', { className: 'cb-card-sub wrap', style: { flex: '1 1 180px' } }, '打开新对话并填入请求，发送后 AI 接手；会带上当前设备与候选模型'),
                 ),
                 models.map(function (model) {
-                  var selected = embedding.llama.model === model.path
+                  var selectedPath = model.relativePath || model.path
+        var selected = embedding.llama.model === selectedPath || embedding.llama.model === model.path
                   var sizeLabel = model.size < 300 * 1024 * 1024 ? '轻量' : model.size < 800 * 1024 * 1024 ? '中量' : '重量'
                   return h('div', { className: 'cb-list-row', key: model.id },
                     h('div', { className: 'cb-list-main', style: { display: 'block' } },
@@ -2120,6 +2311,12 @@ window.__ModuleLoader__.load({
               )
             : h('div', { className: 'cb-empty' }, '设备检测中…'),
         ),
+        dimensionPrompt ? h(DimensionDialog, {
+          prompt: dimensionPrompt,
+          onKeep: function () { resolveDimensionPrompt('keep') },
+          onChange: function () { resolveDimensionPrompt('change') },
+          onCancel: function () { resolveDimensionPrompt('cancel') },
+        }) : null,
       )
     }
 

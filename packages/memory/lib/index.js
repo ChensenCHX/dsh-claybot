@@ -2,6 +2,8 @@ import { ConfigService } from './config.js'
 import { DbService } from './db-service.js'
 import { EmbeddingService } from './embedding.js'
 import { MaintenanceService } from './maintenance.js'
+import { MemoryMigration } from './memory-migration.js'
+import { MemorySchema } from './memory-schema.js'
 import { registerRoutes } from './api.js'
 
 export const name = 'dsh-claybot-memory'
@@ -12,7 +14,9 @@ export function apply(ctx) {
   const maintenance = new MaintenanceService(db)
   const config = new ConfigService(maintenance, db)
   const embedding = new EmbeddingService(config)
-  registerRoutes(ctx, db, maintenance, config, embedding)
+  const memorySchema = new MemorySchema(db, config)
+  const memoryMigration = new MemoryMigration(db, config, embedding, memorySchema)
+  registerRoutes(ctx, db, maintenance, config, embedding, memorySchema, memoryMigration)
   maintenance.startAutoCheck()
   embedding.init().catch((error) => {
     embedding.lastError = error instanceof Error ? error.message : String(error)
@@ -22,7 +26,12 @@ export function apply(ctx) {
     try { await embedding.stop() } catch {}
     await db.dispose()
   }, 'claybot-memory: database service')
-  db.init().catch((error) => {
-    db.lastError = error instanceof Error ? error.message : String(error)
-  })
+  db.init()
+    .then(async () => {
+      await memorySchema.ensure()
+      await memoryMigration.recoverInterrupted()
+    })
+    .catch((error) => {
+      memorySchema.lastError = error instanceof Error ? error.message : String(error)
+    })
 }

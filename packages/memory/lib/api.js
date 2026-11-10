@@ -42,7 +42,7 @@ function queryParam(request, name) {
   return new URL(request.url).searchParams.get(name)
 }
 
-export function registerRoutes(ctx, db, maintenance, config, embedding) {
+export function registerRoutes(ctx, db, maintenance, config, embedding, memorySchema, memoryMigration) {
   const routes = [
     {
       path: PREFIX + '/status',
@@ -173,6 +173,41 @@ export function registerRoutes(ctx, db, maintenance, config, embedding) {
       path: CONFIG_PREFIX + '/config/devices',
       methods: ['GET'],
       handler: async () => json(config.devices()),
+    },
+    {
+      path: CONFIG_PREFIX + '/memory/schema',
+      methods: ['GET', 'POST'],
+      handler: async (request) => {
+        if (request.method === 'GET') return json(await memorySchema.status())
+        const body = await readJson(request)
+        if (body.confirm !== true) throw Object.assign(new Error('memory schema ensure requires confirm: true'), { status: 400 })
+        return json(await memorySchema.ensure())
+      },
+    },
+    {
+      path: CONFIG_PREFIX + '/memory/schema/migrations',
+      methods: ['GET', 'POST'],
+      handler: async (request) => {
+        if (request.method === 'GET') {
+          const status = await memorySchema.status()
+          return json({ migrations: status.migrations || [], active: status.migration || null })
+        }
+        const body = await readJson(request)
+        if (body.confirm !== true) throw Object.assign(new Error('memory migration requires confirm: true'), { status: 400 })
+        const migration = await memoryMigration.start()
+        return json({ ok: true, migration }, 202)
+      },
+    },
+    {
+      path: CONFIG_PREFIX + '/memory/schema/migrations/resume',
+      methods: ['POST'],
+      handler: async (request) => {
+        const body = await readJson(request)
+        if (body.confirm !== true) throw Object.assign(new Error('memory migration resume requires confirm: true'), { status: 400 })
+        if (body.id === undefined || body.id === null) throw Object.assign(new Error('memory migration id is required'), { status: 400 })
+        const migration = await memoryMigration.resume(Number(body.id))
+        return json({ ok: true, migration }, 202)
+      },
     },
     {
       path: EMBEDDING_PREFIX + '/status',

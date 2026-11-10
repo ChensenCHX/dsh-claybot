@@ -12,6 +12,23 @@ export function stateDir() {
   return process.env.CLAYBOT_STATE_DIR || path.join(dshHome(), 'claybot')
 }
 
+export function resolveStatePath(value) {
+  const raw = String(value || '').trim()
+  if (raw === '') return ''
+  return path.isAbsolute(raw) ? path.normalize(raw) : path.resolve(stateDir(), raw)
+}
+
+export function toStateRelative(value) {
+  const raw = String(value || '').trim()
+  if (raw === '') return ''
+  const resolved = path.isAbsolute(raw) ? path.normalize(raw) : path.resolve(stateDir(), raw)
+  const relative = path.relative(stateDir(), resolved)
+  if (relative !== '' && relative !== '..' && !relative.startsWith('..' + path.sep) && !path.isAbsolute(relative)) {
+    return './' + relative.split(path.sep).join('/')
+  }
+  return resolved
+}
+
 export function dbRoot() {
   return path.join(stateDir(), 'db')
 }

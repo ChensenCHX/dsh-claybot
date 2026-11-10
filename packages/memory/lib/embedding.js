@@ -15,6 +15,8 @@ import {
   logsDir,
   modelsDir,
   readJson,
+  resolveStatePath,
+  toStateRelative,
   writeJson,
 } from './paths.js'
 
@@ -241,8 +243,14 @@ function writeUsage(usage) {
   } catch {}
 }
 
-function runProcess(command, args, timeoutMs = 5000) {
-  return new Promise((resolve) => {
+function fitEmbeddingVector(vector, dimensions) {
+  const values = Array.isArray(vector) ? vector.map((value) => Number(value)) : []
+  if (values.length === dimensions) return values
+  if (values.length > dimensions) return values.slice(0, dimensions)
+  return values.concat(new Array(dimensions - values.length).fill(0))
+}
+
+function runProcess(command, args, timeoutMs = 5000) {  return new Promise((resolve) => {
     let stdout = ''
     let stderr = ''
     let settled = false
@@ -358,6 +366,7 @@ export class EmbeddingService {
     this.server = null
     this.usage = readUsage()
     this.cpuSample = null
+    this.lastEmbedding = null
   }
 
   get installed() {
@@ -375,8 +384,7 @@ export class EmbeddingService {
   }
 
   async init() {
-    const config = this.configService.read()
-    const embedding = config.embedding
+    const embedding = this.configService.embeddingInternal()
     if (embedding.mode !== 'llama' || embedding.llama.autoStart !== true) return
     if (!this.installed) return
     if (!embedding.llama.model || !fs.existsSync(embedding.llama.model)) return
@@ -391,7 +399,7 @@ export class EmbeddingService {
     if (typeof filePath !== 'string' || filePath.trim() === '') {
       throw Object.assign(new Error('GGUF path is required'), { status: 400 })
     }
-    const absolute = path.resolve(filePath)
+    const absolute = resolveStatePath(filePath)
     try {
       if (!fs.existsSync(absolute) || !fs.statSync(absolute).isFile()) {
         throw Object.assign(new Error('GGUF file not found: ' + absolute), { status: 400 })
@@ -589,17 +597,28 @@ export class EmbeddingService {
       if (vectors.length !== list.length || vectors.some((vector) => vector === null)) {
         throw new Error('embedding endpoint returned an unexpected response shape')
       }
+      const nativeDimensions = vectors[0].length
+      const targetDimensions = Number(embedding.dimensions) || nativeDimensions
+      const fitted = vectors.map((vector) => fitEmbeddingVector(vector, targetDimensions))
+      this.lastEmbedding = {
+        nativeDimensions,
+        dimensions: targetDimensions,
+        adapted: nativeDimensions !== targetDimensions,
+        at: new Date().toISOString(),
+      }
       const entry = {
         at: new Date().toISOString(),
         mode: embedding.mode,
         ok: true,
         endpoint,
         inputs: list.length,
-        dimensions: vectors[0].length,
+        nativeDimensions,
+        dimensions: targetDimensions,
+        adapted: nativeDimensions !== targetDimensions,
         durationMs: Date.now() - startedAt,
       }
       this.recordCall(entry)
-      return vectors
+      return fitted
     } catch (error) {
       this.recordCall({
         at: new Date().toISOString(),
@@ -616,7 +635,13 @@ export class EmbeddingService {
 
   async probe() {
     const vectors = await this.embed(['claybot embedding probe'])
-    return { ok: true, dimensions: vectors[0].length, usage: this.usageSnapshot() }
+    return {
+      ok: true,
+      dimensions: vectors[0].length,
+      nativeDimensions: this.lastEmbedding ? this.lastEmbedding.nativeDimensions : vectors[0].length,
+      adapted: this.lastEmbedding ? this.lastEmbedding.adapted : false,
+      usage: this.usageSnapshot(),
+    }
   }
 
   async monitor() {
@@ -635,6 +660,7 @@ export class EmbeddingService {
         checkedAt,
         operation,
         usage,
+        lastEmbedding: this.lastEmbedding,
         remote: {
           baseUrl,
           model: embedding.remote.model || '',
@@ -653,6 +679,7 @@ export class EmbeddingService {
       checkedAt,
       operation,
       usage,
+      lastEmbedding: this.lastEmbedding,
       llama: {
         build: state.llama ? state.llama.build : null,
         backend: state.llama ? state.llama.backend : null,
@@ -666,13 +693,14 @@ export class EmbeddingService {
   async status() {
     const config = this.configService.read()
     const embedding = config.embedding
+    const internal = this.configService.embeddingInternal()
     const device = config.device
     const deviceInfo = this.configService.devices()
     const cudaVersion = deviceInfo.cudaVersion || null
     const state = readState()
     const llamaState = state.llama || null
     const binaryPath = llamaState ? path.join(llamaState.root, llamaState.server || 'llama-server.exe') : null
-    const modelPath = embedding.llama.model || null
+    const modelPath = internal.llama.model || null
     let running = false
     if (embedding.mode === 'llama') {
       if (this.server !== null && this.server.exitCode === null) running = true
@@ -699,6 +727,13 @@ export class EmbeddingService {
     }
     const recommendedAsset = assets.find((asset) => asset.backend === recommendedBackend)
     if (recommendedAsset) recommendedAsset.recommended = true
+    let modelDimensions = null
+    if (embedding.mode === 'llama' && modelPath && fs.existsSync(modelPath)) {
+      try {
+        const metadata = this.inspectGguf(modelPath)
+        if (metadata && Number(metadata.dimensions) > 0) modelDimensions = Number(metadata.dimensions)
+      } catch {}
+    }
     return {
       installed: Boolean(binaryPath && fs.existsSync(binaryPath)),
       running,
@@ -708,8 +743,9 @@ export class EmbeddingService {
         ? { build: llamaState.build, backend: llamaState.backend, root: llamaState.root, server: llamaState.server, binaryPath, installedAt: llamaState.installedAt }
         : null,
       model: modelPath
-        ? { path: modelPath, exists: fs.existsSync(modelPath), size: fs.existsSync(modelPath) ? fs.statSync(modelPath).size : 0 }
+        ? { path: modelPath, relativePath: toStateRelative(modelPath), exists: fs.existsSync(modelPath), size: fs.existsSync(modelPath) ? fs.statSync(modelPath).size : 0, dimensions: modelDimensions }
         : null,
+      modelDimensions,
       embedding,
       device,
       deviceCudaVersion: cudaVersion,
@@ -724,6 +760,7 @@ export class EmbeddingService {
           ...model,
           downloadUrl: modelDownloadUrl(model),
           path: file,
+          relativePath: toStateRelative(file),
           downloaded: fs.existsSync(file),
           downloadedSize: fs.existsSync(file) ? fs.statSync(file).size : 0,
         }
@@ -809,7 +846,7 @@ export class EmbeddingService {
   }
 
   browse(target) {
-    let dir = typeof target === 'string' && target.trim().length > 0 ? path.resolve(target.trim()) : os.homedir()
+    let dir = typeof target === 'string' && target.trim().length > 0 ? resolveStatePath(target.trim()) : os.homedir()
     if (fs.existsSync(dir) && fs.statSync(dir).isFile()) dir = path.dirname(dir)
     if (!fs.existsSync(dir) || !fs.statSync(dir).isDirectory()) dir = os.homedir()
     const entries = fs.readdirSync(dir, { withFileTypes: true })
@@ -830,8 +867,7 @@ export class EmbeddingService {
 
   async start() {
     if (this.operation !== null) throw new Error('another embedding operation is running')
-    const config = this.configService.read()
-    const embedding = config.embedding
+    const embedding = this.configService.embeddingInternal()
     if (embedding.mode !== 'llama') throw new Error('embedding mode is not llama.cpp')
     const state = readState()
     if (!state.llama) throw new Error('llama.cpp runtime is not installed')
