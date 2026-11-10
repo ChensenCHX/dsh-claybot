@@ -100,7 +100,9 @@ window.__ModuleLoader__.load({
       '.cb-btn.primary{background:var(--dsw-alias-button-primary-fill,#3b82f6);border-color:transparent;color:var(--dsw-alias-label-primary-foreground,#fff);font-weight:600}',
       '.cb-btn.ghost{background:transparent;border-color:transparent;color:var(--dsw-alias-label-secondary,#9a9a9a);padding-left:6px;padding-right:6px}',
       '.cb-btn.ghost:hover{color:var(--dsw-alias-label-primary,#e8e8e8);background:var(--dsw-alias-interactive-bg-hover,rgba(127,127,127,.12))}',
-      '.cb-btn.danger{color:var(--dsw-alias-state-error-primary,#f87171)}',
+      '.cb-btn.danger{background:var(--dsw-alias-state-error-primary,#dc2626);border-color:transparent;color:#fff;font-weight:600}',
+      '.cb-btn.danger:hover{background:var(--dsw-alias-state-error-primary-hover,#b91c1c)}',
+      '.cb-btn.danger:disabled{background:var(--dsw-alias-state-error-primary,#dc2626);opacity:.45}',
       '.cb-btn:disabled{opacity:.45;cursor:default}',
       '.cb-chip{display:inline-flex;align-items:center;gap:4px;border:1px solid var(--dsw-alias-border-l1,rgba(127,127,127,.22));background:var(--dsw-alias-bg-layer-2,rgba(127,127,127,.08));border-radius:999px;padding:1px 8px;font-size:10px;color:var(--dsw-alias-label-secondary,#9a9a9a);white-space:nowrap}',
       '.cb-chip.ok{color:var(--dsw-alias-state-success-primary,#34d399)}',
@@ -2814,6 +2816,139 @@ window.__ModuleLoader__.load({
       )
     }
 
+    function formatTimestamp(value) {
+      if (!value) return '—'
+      try { return new Date(value).toLocaleString() } catch (error) { return String(value) }
+    }
+
+    function MemorySchemaPage() {
+      var dataState = useState(null)
+      var data = dataState[0]
+      var setData = dataState[1]
+      var errorState = useState('')
+      var error = errorState[0]
+      var setError = errorState[1]
+      var noticeState = useState('')
+      var notice = noticeState[0]
+      var setNotice = noticeState[1]
+      var busyState = useState(false)
+      var busy = busyState[0]
+      var setBusy = busyState[1]
+      var load = useCallback(function () {
+        return memoryRequest('/schema')
+          .then(function (value) { setData(value); setError('') })
+          .catch(function (failure) { setError(failure.message) })
+      }, [])
+      useEffect(function () {
+        load()
+        var timer = setInterval(load, 4000)
+        return function () { clearInterval(timer) }
+      }, [load])
+      useEffect(function () {
+        if (!notice) return
+        var timer = setTimeout(function () { setNotice('') }, 3500)
+        return function () { clearTimeout(timer) }
+      }, [notice])
+      function startMigration() {
+        if (typeof window !== 'undefined' && typeof window.confirm === 'function') {
+          var ok = window.confirm('将删除旧向量表并对全部记忆条目重新嵌入。迁移完成前向量召回会降级。确认开始迁移？')
+          if (!ok) return
+        }
+        setBusy(true)
+        setError('')
+        memoryRequest('/schema/migrations', { method: 'POST', body: { confirm: true } })
+          .then(function () { setNotice('向量重嵌已开始'); return load() })
+          .catch(function (failure) { setError(failure.message) })
+          .finally(function () { setBusy(false) })
+      }
+      function resumeMigration(migration) {
+        setBusy(true)
+        setError('')
+        memoryRequest('/schema/migrations/resume', { method: 'POST', body: { id: migration.id, confirm: true } })
+          .then(function () { setNotice('已恢复迁移 #' + migration.id); return load() })
+          .catch(function (failure) { setError(failure.message) })
+          .finally(function () { setBusy(false) })
+      }
+      if (!data && error) {
+        return h(Card, { title: 'Memory schema', right: h(Chip, { tone: 'err' }, '不可用') },
+          h('div', { className: 'cb-error' }, error),
+          h('div', { className: 'cb-hero-desc', style: { marginTop: 6, marginBottom: 0 } }, '这通常表示 memory DB service 未启用，或 PostgreSQL 未运行。'),
+        )
+      }
+      if (!data) return h(Card, { title: 'Memory schema' }, h('div', { className: 'cb-empty' }, '加载中…'))
+      var migration = data.migration || null
+      var database = data.database || {}
+      var history = (data.migrations || []).slice(0, 10)
+      var tone = !database.installed || !database.running ? 'err' : data.needsMigration ? 'warn' : 'ok'
+      var label = !database.installed ? '未安装' : !database.running ? '数据库未运行' : data.needsMigration ? '需要迁移' : '正常'
+      return h('div', null,
+        notice ? h(Banner, { tone: 'ok' }, notice) : null,
+        error ? h(Banner, { tone: 'error' }, error) : null,
+        h(Card, {
+          title: 'Memory schema',
+          sub: '向量存储与索引',
+          right: h(Chip, { tone: tone === 'ok' ? 'ok' : tone }, label),
+        },
+          h('div', { className: 'cb-hero-head' },
+            h(Dot, { tone: tone }),
+            h('span', { className: 'cb-hero-state' }, label),
+            migration ? h(Chip, { tone: migration.status === 'completed' ? 'ok' : 'warn' }, 'migration #' + migration.id + ' · ' + migration.status) : null,
+          ),
+          data.needsMigration
+            ? h('div', { className: 'cb-hero-desc' }, '配置维度 ' + String(data.expected && data.expected.dimensions) + ' 与当前 schema 维度 ' + String(data.dimensions) + ' 不一致。迁移会删除旧向量表并全量重嵌，期间向量召回降级。')
+            : h('div', { className: 'cb-hero-desc' }, '当前 schema 版本 ' + String(data.version) + '，向量维度 ' + String(data.dimensions) + '，存储 ' + String(data.storage) + '。'),
+          h('div', { className: 'cb-metrics' },
+            h(Metric, { key: 'version', label: '版本', value: String(data.version || '—'), hint: data.appliedAt ? formatTimestamp(data.appliedAt) : '' }),
+            h(Metric, { key: 'dimensions', label: '维度', value: String(data.dimensions || '—'), hint: data.expected ? '配置 ' + String(data.expected.dimensions) : '' }),
+            h(Metric, { key: 'storage', label: '存储', value: String(data.storage || '—'), hint: data.index || '' }),
+            h(Metric, { key: 'tables', label: '表数量', value: String(data.tables || 0), hint: 'memory schema' }),
+          ),
+          migration
+            ? h('div', null,
+                h('div', { className: 'cb-section-label' }, '迁移进度'),
+                h('div', { className: 'cb-card-sub wrap' },
+                  String(migration.from_dimensions) + ' → ' + String(migration.to_dimensions) + ' 维 · ' +
+                  String(migration.processed_entries) + ' / ' + String(migration.total_entries) + ' 条 · ' + String(migration.status),
+                ),
+                h('div', { className: 'cb-progress' },
+                  h('span', {
+                    style: { width: (migration.total_entries > 0 ? Math.min(100, Math.round((migration.processed_entries / migration.total_entries) * 100)) : 0) + '%' },
+                  }),
+                ),
+                migration.error ? h('div', { className: 'cb-error', style: { marginTop: 6 } }, migration.error) : null,
+                (migration.status === 'failed' || migration.status === 'interrupted')
+                  ? h('div', { className: 'cb-actions' },
+                      h('button', { type: 'button', className: 'cb-btn primary', disabled: busy, onClick: function () { resumeMigration(migration) } }, busy ? '处理中…' : '恢复迁移'),
+                    )
+                  : null,
+              )
+            : null,
+          h('div', { className: 'cb-actions' },
+            h('button', {
+              type: 'button',
+              className: 'cb-btn danger',
+              disabled: busy || !database.installed || !database.running || !data.needsMigration || migration !== null,
+              onClick: startMigration,
+            }, busy ? '处理中…' : '重建索引并重嵌'),
+            h('button', { type: 'button', className: 'cb-btn ghost', onClick: function () { load().then(function () { setNotice('状态已刷新') }) } }, '刷新'),
+          ),
+        ),
+        history.length > 0
+          ? h(Card, { title: '迁移记录', sub: '最近 ' + String(history.length) + ' 条' },
+              history.map(function (row) {
+                return h('div', { className: 'cb-list-row', key: row.id },
+                  h('div', { className: 'cb-list-main', style: { display: 'block', minWidth: 0 } },
+                    h('div', null, '#' + String(row.id) + ' · ' + String(row.status) + ' · ' + String(row.from_dimensions) + ' → ' + String(row.to_dimensions) + ' 维'),
+                    h('div', { className: 'cb-card-sub wrap' }, String(row.processed_entries) + ' / ' + String(row.total_entries) + ' 条' + (row.error ? ' · ' + row.error : '')),
+                  ),
+                  h('div', { className: 'cb-list-side' }, formatTimestamp(row.updated_at)),
+                )
+              }),
+            )
+          : null,
+      )
+    }
+
     function Placeholder(props) {
       return h(Card, { title: props.title }, h('div', { className: 'cb-empty' }, props.description || '待接入'))
     }
@@ -2839,7 +2974,7 @@ window.__ModuleLoader__.load({
             onClick: function () { setTab(item[0]) },
           }, item[1])
         })),
-        tab === 'overview' ? h(Placeholder, { title: '记忆概览', description: '记忆条目、召回与维护状态（M2）' }) : null,
+        tab === 'overview' ? h(MemorySchemaPage) : null,
         tab === 'database' ? h(DatabasePage) : null,
         tab === 'embedding' ? h(EmbeddingPage) : null,
         tab === 'spaces' ? h(Placeholder, { title: '记忆空间', description: '记忆空间与条目浏览（M2）' }) : null,

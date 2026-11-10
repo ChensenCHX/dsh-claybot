@@ -80,6 +80,22 @@ CREATE TABLE IF NOT EXISTS memory.memory_state (
   value_json text NOT NULL
 );
 
+DO $$
+BEGIN
+  IF to_regclass('memory.memory_entries_vec') IS NOT NULL THEN
+    IF NOT EXISTS (
+      SELECT 1 FROM pg_attribute a
+      JOIN pg_class c ON c.oid = a.attrelid
+      JOIN pg_namespace n ON n.oid = c.relnamespace
+      WHERE n.nspname = 'memory' AND c.relname = 'memory_entries_vec'
+        AND a.attname = 'embedding' AND a.attnum > 0 AND NOT a.attisdropped
+        AND format_type(a.atttypid, a.atttypmod) IN ('vector', 'halfvec')
+    ) THEN
+      DROP TABLE memory.memory_entries_vec;
+    END IF;
+  END IF;
+END $$;
+
 CREATE TABLE IF NOT EXISTS memory.memory_entries_vec (
   memory_id text PRIMARY KEY REFERENCES memory.memory_entries(id) ON DELETE CASCADE,
   type text NOT NULL,
