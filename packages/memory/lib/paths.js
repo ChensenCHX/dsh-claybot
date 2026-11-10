@@ -40,6 +40,26 @@ export function settingsPath() {
   return path.join(dbRoot(), 'settings.json')
 }
 
+export function inferenceConfigPath() {
+  return path.join(stateDir(), 'inference.json')
+}
+
+export function embeddingStatePath() {
+  return path.join(stateDir(), 'embedding-state.json')
+}
+
+export function embeddingUsagePath() {
+  return path.join(stateDir(), 'embedding-usage.json')
+}
+
+export function depsDir() {
+  return path.join(stateDir(), 'deps')
+}
+
+export function modelsDir() {
+  return path.join(stateDir(), 'models')
+}
+
 export function backupsDir() {
   return path.join(stateDir(), 'backups')
 }

@@ -1,4 +1,6 @@
 const PREFIX = '/api/claybot/db'
+const CONFIG_PREFIX = '/api/claybot'
+const EMBEDDING_PREFIX = '/api/claybot/embedding'
 const MAX_BODY_BYTES = 200000
 
 function json(value, status = 200) {
@@ -40,7 +42,7 @@ function queryParam(request, name) {
   return new URL(request.url).searchParams.get(name)
 }
 
-export function registerRoutes(ctx, db, maintenance) {
+export function registerRoutes(ctx, db, maintenance, config, embedding) {
   const routes = [
     {
       path: PREFIX + '/status',
@@ -137,6 +139,98 @@ export function registerRoutes(ctx, db, maintenance) {
         const role = body.role || 'admin'
         const sql = body.sql
         return json(await db.query(role, sql))
+      },
+    },
+    {
+      path: CONFIG_PREFIX + '/config',
+      methods: ['GET', 'PUT'],
+      handler: async (request) => {
+        if (request.method === 'GET') return json(config.read())
+        const body = await readJson(request)
+        return json(config.save(body))
+      },
+    },
+    {
+      path: CONFIG_PREFIX + '/config/export',
+      methods: ['GET'],
+      handler: async (request) => {
+        const secrets = queryParam(request, 'secrets') === '1'
+        return json(config.exportSheet({ includeSecrets: secrets }))
+      },
+    },
+    {
+      path: CONFIG_PREFIX + '/config/import',
+      methods: ['POST'],
+      handler: async (request) => {
+        const body = await readJson(request)
+        if (!body || typeof body !== 'object' || !body.sheet || typeof body.sheet !== 'object') {
+          throw Object.assign(new Error('import requires a config sheet'), { status: 400 })
+        }
+        return json(config.importSheet(body.sheet, { apply: body.apply === true }))
+      },
+    },
+    {
+      path: CONFIG_PREFIX + '/config/devices',
+      methods: ['GET'],
+      handler: async () => json(config.devices()),
+    },
+    {
+      path: EMBEDDING_PREFIX + '/status',
+      methods: ['GET'],
+      handler: async () => json(await embedding.status()),
+    },
+    {
+      path: EMBEDDING_PREFIX + '/browse',
+      methods: ['GET'],
+      handler: async (request) => json(embedding.browse(queryParam(request, 'path') || '')),
+    },
+    {
+      path: EMBEDDING_PREFIX + '/gguf',
+      methods: ['GET'],
+      handler: async (request) => json(embedding.inspectGguf(queryParam(request, 'path') || '')),
+    },
+    {
+      path: EMBEDDING_PREFIX + '/monitor',
+      methods: ['GET'],
+      handler: async () => json(await embedding.monitor()),
+    },
+    {
+      path: EMBEDDING_PREFIX + '/probe',
+      methods: ['POST'],
+      handler: async () => json(await embedding.probe()),
+    },
+    {
+      path: EMBEDDING_PREFIX + '/install',
+      methods: ['POST'],
+      handler: async (request) => {
+        const body = await readJson(request)
+        if (body.confirm !== true) throw Object.assign(new Error('install requires confirm: true'), { status: 400 })
+        if (embedding.operation !== null) throw Object.assign(new Error('another embedding operation is running'), { status: 409 })
+        embedding.install(body.backend || 'vulkan').catch(() => {})
+        return json({ ok: true, status: await embedding.status() }, 202)
+      },
+    },
+    {
+      path: EMBEDDING_PREFIX + '/models/download',
+      methods: ['POST'],
+      handler: async (request) => {
+        const body = await readJson(request)
+        if (body.confirm !== true) throw Object.assign(new Error('download requires confirm: true'), { status: 400 })
+        if (embedding.operation !== null) throw Object.assign(new Error('another embedding operation is running'), { status: 409 })
+        embedding.downloadModel(body.modelId).catch(() => {})
+        return json({ ok: true, status: await embedding.status() }, 202)
+      },
+    },
+    {
+      path: EMBEDDING_PREFIX + '/action',
+      methods: ['POST'],
+      handler: async (request) => {
+        const body = await readJson(request)
+        if (body.action === 'start') await embedding.start()
+        else if (body.action === 'stop') await embedding.stop()
+        else if (body.action === 'restart') await embedding.restart()
+        else throw Object.assign(new Error('unknown action: ' + String(body.action)), { status: 400 })
+        return json({ ok: true, status: await embedding.status() })
       },
     },
   ]

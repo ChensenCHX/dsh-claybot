@@ -10,8 +10,11 @@ window.__ModuleLoader__.load({
     var useState = React.useState
     var useEffect = React.useEffect
     var useCallback = React.useCallback
+    var clientCtx = null
 
     var API = '/api/claybot/db'
+    var CONFIG_API = '/api/claybot'
+    var EMBEDDING_API = '/api/claybot/embedding'
     var MAX_ROWS = 500
 
     var CSS = [
@@ -35,6 +38,7 @@ window.__ModuleLoader__.load({
       '.cb-card-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px}',
       '.cb-card-title{font-size:13px;font-weight:600;display:flex;align-items:center;gap:8px;min-width:0}',
       '.cb-card-sub{color:var(--dsw-alias-label-tertiary,#8b8b8b);font-size:11px;font-weight:400;white-space:nowrap}',
+      '.cb-card-sub.wrap{white-space:normal;overflow-wrap:anywhere}',
       '.cb-hero-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap}',
       '.cb-hero-state{font-size:16px;font-weight:650;letter-spacing:-.01em}',
       '.cb-hero-desc{color:var(--dsw-alias-label-secondary,#9a9a9a);font-size:12px;margin:4px 0 10px;overflow-wrap:anywhere}',
@@ -48,6 +52,37 @@ window.__ModuleLoader__.load({
       '.cb-metric-label{font-size:10px;letter-spacing:.04em;text-transform:uppercase;color:var(--dsw-alias-label-tertiary,#8b8b8b)}',
       '.cb-metric-value{font-size:13px;font-weight:600;margin-top:1px;overflow-wrap:anywhere}',
       '.cb-metric-hint{font-size:10px;color:var(--dsw-alias-label-tertiary,#8b8b8b);margin-top:1px;overflow-wrap:anywhere}',
+      '.cb-bars{display:flex;align-items:flex-end;gap:2px;height:54px;padding-top:4px;margin-top:8px;border-bottom:1px solid var(--dsw-alias-border-l1,rgba(127,127,127,.16))}',
+      '.cb-bar{flex:1;min-width:0;height:100%;display:flex;align-items:flex-end}',
+      '.cb-bar-fill{width:100%;min-height:2px;border-radius:2px 2px 0 0;background:var(--dsw-alias-state-success-primary,#34d399)}',
+      '.cb-bar-fill.is-fail{background:var(--dsw-alias-state-error-primary,#f87171)}',
+      '.cb-bar-labels{display:flex;justify-content:space-between;gap:8px;font-size:9px;color:var(--dsw-alias-label-tertiary,#8b8b8b);margin-top:3px}',
+      '.cb-resource-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:10px 0}',
+      '.cb-resource{background:var(--dsw-alias-bg-layer-2,rgba(127,127,127,.08));border:1px solid var(--dsw-alias-border-l1,rgba(127,127,127,.2));border-radius:10px;padding:8px 9px;min-width:0;min-height:166px;display:flex;flex-direction:column}',
+      '.cb-resource-label{font-size:10px;letter-spacing:.04em;text-transform:uppercase;color:var(--dsw-alias-label-tertiary,#8b8b8b)}',
+      '.cb-resource-value{font-size:16px;font-weight:650;letter-spacing:-.01em;margin-top:1px}',
+      '.cb-resource-sub{font-size:10px;color:var(--dsw-alias-label-tertiary,#8b8b8b);margin-top:1px;overflow-wrap:anywhere}',
+      '.cb-resource-ring{align-items:center;justify-content:center;text-align:center}',
+      '.cb-resource-ring .cb-resource-label{align-self:flex-start;width:100%;text-align:left}',
+      '.cb-spark-wrap{display:flex;gap:5px;align-items:stretch;flex:1;min-height:92px;margin-top:6px}',
+      '.cb-spark-scale{display:flex;flex-direction:column;justify-content:space-between;height:auto;min-height:92px;font-size:8px;color:var(--dsw-alias-label-tertiary,#8b8b8b);text-align:right;min-width:22px;line-height:1}',
+      '.cb-spark-plot{position:relative;flex:1;height:auto;min-height:92px;border-left:1px solid var(--dsw-alias-border-l1,rgba(127,127,127,.2));border-bottom:1px solid var(--dsw-alias-border-l1,rgba(127,127,127,.2));background-image:linear-gradient(to top,rgba(127,127,127,.16) 1px,transparent 1px),linear-gradient(to right,rgba(127,127,127,.12) 1px,transparent 1px);background-size:100% 25%,25% 100%}',
+      '.cb-spark-plot::after{content:"";position:absolute;left:0;right:0;top:50%;border-top:1px dashed rgba(127,127,127,.35);pointer-events:none}',
+      '.cb-spark{width:100%;height:100%;min-height:92px;display:block}',
+      '.cb-spark polyline{fill:none;stroke:var(--dsw-alias-state-success-primary,#34d399);stroke-width:1.5;vector-effect:non-scaling-stroke}',
+      '.cb-spark.cpu polyline{stroke:#60a5fa}',
+      '.cb-spark.gpu polyline{stroke:#c084fc}',
+      '.cb-spark.ram polyline{stroke:#fbbf24}',
+      '.cb-spark-empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:9px;color:var(--dsw-alias-label-tertiary,#8b8b8b)}',
+      '.cb-ring-wrap{display:flex;align-items:center;justify-content:center;gap:12px;margin-top:6px;flex:1;width:100%}',
+      '.cb-ring{width:64px;height:64px;flex:none}',
+      '.cb-ring-bg{fill:none;stroke:var(--dsw-alias-border-l1,rgba(127,127,127,.22));stroke-width:5}',
+      '.cb-ring-fg{fill:none;stroke:#c084fc;stroke-width:5;stroke-linecap:round;transition:stroke-dashoffset .3s}',
+      '.cb-ring-text{fill:var(--dsw-alias-label-primary,#e8e8e8);font-size:9px;font-weight:600}',
+      '.cb-ring-copy{min-width:0;text-align:left}',
+      '.cb-ring-row{display:grid;grid-template-columns:auto auto;gap:2px 8px;font-size:10px;align-items:baseline}',
+      '.cb-ring-key{color:var(--dsw-alias-label-tertiary,#8b8b8b);text-align:left}',
+      '.cb-ring-val{color:var(--dsw-alias-label-primary,#e8e8e8);text-align:right;font-variant-numeric:tabular-nums}',
       '.cb-kv{display:grid;grid-template-columns:82px minmax(0,1fr);gap:5px 10px;font-size:12px;align-items:baseline}',
       '.cb-kv-label{color:var(--dsw-alias-label-tertiary,#8b8b8b);font-size:11px}',
       '.cb-kv-value{min-width:0;overflow-wrap:anywhere}',
@@ -97,6 +132,11 @@ window.__ModuleLoader__.load({
       '.cb-input:focus{outline:none;border-color:var(--dsw-alias-brand-primary,#3b82f6)}',
       '.cb-form-row{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:8px}',
       '.cb-form-row .cb-input{flex:1;min-width:150px}',
+      '.cb-field{display:flex;flex-direction:column;gap:3px;margin-top:8px;min-width:0}',
+      '.cb-field-label{font-size:10px;color:var(--dsw-alias-label-tertiary,#8b8b8b);letter-spacing:.02em}',
+      '.cb-field-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}',
+      '.cb-checkbox{display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--dsw-alias-label-secondary,#9a9a9a)}',
+      '.cb-file{font-size:11px;color:var(--dsw-alias-label-secondary,#9a9a9a);max-width:100%}',
       '.cb-sql-actions{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:8px}',
       '.cb-check{display:inline-flex;align-items:center;gap:5px;color:var(--dsw-alias-label-secondary,#9a9a9a);font-size:11px}',
       '.cb-result{margin-top:8px}',
@@ -106,7 +146,7 @@ window.__ModuleLoader__.load({
       '.cb-root select:focus,.cb-root textarea:focus{outline:none;border-color:var(--dsw-alias-brand-primary,#3b82f6)}',
     ].join('\n')
 
-    function request(path, options) {
+    function requestFrom(base, path, options) {
       var opts = Object.assign({}, options || {})
       opts.credentials = 'same-origin'
       opts.headers = Object.assign({}, opts.headers || {})
@@ -114,7 +154,7 @@ window.__ModuleLoader__.load({
         opts.body = JSON.stringify(opts.body)
         if (!opts.headers['content-type']) opts.headers['content-type'] = 'application/json'
       }
-      return fetch(API + path, opts).then(function (response) {
+      return fetch(base + path, opts).then(function (response) {
         return response.text().then(function (text) {
           var data = null
           try {
@@ -133,6 +173,22 @@ window.__ModuleLoader__.load({
       })
     }
 
+    function request(path, options) {
+      return requestFrom(API, path, options)
+    }
+
+    function configRequest(path, options) {
+      return requestFrom(CONFIG_API, path, options)
+    }
+
+    function embeddingRequest(path, options) {
+      return requestFrom(EMBEDDING_API, path, options)
+    }
+
+    function inspectGguf(filePath) {
+      return embeddingRequest('/gguf?path=' + encodeURIComponent(filePath))
+    }
+
     function formatBytes(value) {
       if (typeof value !== 'number' || !Number.isFinite(value)) return '—'
       var units = ['B', 'KB', 'MB', 'GB']
@@ -143,6 +199,20 @@ window.__ModuleLoader__.load({
         index += 1
       }
       return (index === 0 ? String(size) : size.toFixed(1)) + ' ' + units[index]
+    }
+
+    function embeddingStorageStrategy(dimensions) {
+      var dim = Number(dimensions) || 0
+      if (dim <= 0) return '—'
+      return dim < 2000 ? 'vector(' + dim + ')' : 'halfvec(' + dim + ')'
+    }
+
+    function embeddingIndexStrategy(dimensions) {
+      var dim = Number(dimensions) || 0
+      if (dim <= 0) return '—'
+      if (dim < 2000) return '全维 vector HNSW'
+      if (dim <= 4000) return '全维 halfvec HNSW'
+      return 'halfvec(4000) 前缀 HNSW + 全量 halfvec rerank（需 MRL）'
     }
 
     function formatValue(value) {
@@ -740,6 +810,1474 @@ window.__ModuleLoader__.load({
       )
     }
 
+    function cloneJson(value) {
+      return JSON.parse(JSON.stringify(value))
+    }
+
+    function setJsonPath(root, parts, value) {
+      var next = cloneJson(root)
+      var cursor = next
+      for (var index = 0; index < parts.length - 1; index += 1) cursor = cursor[parts[index]]
+      cursor[parts[parts.length - 1]] = value
+      return next
+    }
+
+    function downloadJson(name, value) {
+      var blob = new Blob([JSON.stringify(value, null, 2)], { type: 'application/json' })
+      var url = URL.createObjectURL(blob)
+      var anchor = document.createElement('a')
+      anchor.href = url
+      anchor.download = name
+      document.body.appendChild(anchor)
+      anchor.click()
+      anchor.remove()
+      setTimeout(function () { URL.revokeObjectURL(url) }, 1000)
+    }
+
+    function ConfigField(props) {
+      return h(
+        'label',
+        { className: 'cb-field' },
+        h('span', { className: 'cb-field-label' }, props.label),
+        props.children,
+        props.hint ? h('span', { className: 'cb-card-sub', style: { whiteSpace: 'normal' } }, props.hint) : null,
+      )
+    }
+
+    function ConfigText(props) {
+      return h(
+        ConfigField,
+        { label: props.label, hint: props.hint },
+        h('input', {
+          className: 'cb-input',
+          type: props.type || 'text',
+          value: props.value === undefined || props.value === null ? '' : props.value,
+          placeholder: props.placeholder || '',
+          spellCheck: false,
+          onChange: function (event) { props.onChange(event.target.value) },
+        }),
+      )
+    }
+
+    function ConfigNumber(props) {
+      return h(
+        ConfigField,
+        { label: props.label, hint: props.hint },
+        h('input', {
+          className: 'cb-input',
+          type: 'number',
+          value: props.value === undefined || props.value === null ? '' : props.value,
+          min: props.min,
+          max: props.max,
+          onChange: function (event) {
+            var text = event.target.value
+            props.onChange(text === '' ? 0 : Number(text))
+          },
+        }),
+      )
+    }
+
+    function ConfigSelect(props) {
+      return h(
+        ConfigField,
+        { label: props.label, hint: props.hint },
+        h('select', {
+          className: 'cb-select',
+          value: props.value,
+          onChange: function (event) { props.onChange(event.target.value) },
+        }, (props.options || []).map(function (item) {
+          var value = Array.isArray(item) ? item[0] : item
+          var label = Array.isArray(item) ? item[1] : item
+          return h('option', { value: value, key: value }, label)
+        })),
+      )
+    }
+
+    function ConfigPage() {
+      var configState = useState(null)
+      var config = configState[0]
+      var setConfig = configState[1]
+      var draftState = useState(null)
+      var draft = draftState[0]
+      var setDraft = draftState[1]
+      var devicesState = useState(null)
+      var devices = devicesState[0]
+      var setDevices = devicesState[1]
+      var errorState = useState('')
+      var error = errorState[0]
+      var setError = errorState[1]
+      var noticeState = useState('')
+      var notice = noticeState[0]
+      var setNotice = noticeState[1]
+      var savingState = useState(false)
+      var saving = savingState[0]
+      var setSaving = savingState[1]
+      var exportingState = useState(false)
+      var exporting = exportingState[0]
+      var setExporting = exportingState[1]
+      var previewingState = useState(false)
+      var previewing = previewingState[0]
+      var setPreviewing = previewingState[1]
+      var applyingState = useState(false)
+      var applying = applyingState[0]
+      var setApplying = applyingState[1]
+      var includeSecretsState = useState(false)
+      var includeSecrets = includeSecretsState[0]
+      var setIncludeSecrets = includeSecretsState[1]
+      var importTextState = useState('')
+      var importText = importTextState[0]
+      var setImportText = importTextState[1]
+      var previewState = useState(null)
+      var preview = previewState[0]
+      var setPreview = previewState[1]
+
+      var loadConfig = useCallback(function () {
+        return configRequest('/config')
+          .then(function (value) {
+            setConfig(value)
+            setDraft({ embedding: cloneJson(value.embedding), device: cloneJson(value.device) })
+            setError('')
+          })
+          .catch(function (failure) { setError(failure.message) })
+      }, [])
+
+      var loadDevices = useCallback(function () {
+        return configRequest('/devices')
+          .then(function (value) { setDevices(value) })
+          .catch(function (failure) { setError(failure.message) })
+      }, [])
+
+      useEffect(function () {
+        loadConfig()
+        loadDevices()
+      }, [loadConfig, loadDevices])
+
+      function update(parts, value) {
+        setDraft(function (previous) { return setJsonPath(previous, parts, value) })
+      }
+
+      function save() {
+        setSaving(true)
+        setError('')
+        setNotice('')
+        configRequest('/config', {
+          method: 'PUT',
+          body: { embedding: draft.embedding, device: draft.device, database: { backupDir: config.database.backupDir } },
+        })
+          .then(function (value) {
+            setConfig(value)
+            setDraft({ embedding: cloneJson(value.embedding), device: cloneJson(value.device) })
+            setNotice('配置已保存')
+          })
+          .catch(function (failure) { setError(failure.message) })
+          .then(function () { setSaving(false) })
+      }
+
+      function refreshDevices() {
+        setError('')
+        loadDevices().then(function () { setNotice('设备信息已刷新') })
+      }
+
+      function exportConfig() {
+        setExporting(true)
+        setError('')
+        setNotice('')
+        configRequest('/config/export?secrets=' + (includeSecrets ? '1' : '0'))
+          .then(function (value) {
+            downloadJson('claybot-config-' + Date.now() + '.json', value)
+            setNotice(includeSecrets ? '配置单已导出（含明文密钥）' : '配置单已导出（密钥已脱敏）')
+          })
+          .catch(function (failure) { setError(failure.message) })
+          .then(function () { setExporting(false) })
+      }
+
+      function readImportFile(event) {
+        var file = event.target.files && event.target.files[0]
+        if (!file) return
+        file.text()
+          .then(function (text) {
+            setImportText(text)
+            setPreview(null)
+            setNotice('已读取配置单，请预览导入')
+          })
+          .catch(function (failure) { setError(failure.message) })
+        event.target.value = ''
+      }
+
+      function parseImportText() {
+        try {
+          return JSON.parse(importText)
+        } catch (failure) {
+          throw new Error('配置单 JSON 无效：' + (failure instanceof Error ? failure.message : String(failure)))
+        }
+      }
+
+      function previewImport() {
+        setPreviewing(true)
+        setError('')
+        setNotice('')
+        try {
+          var sheet = parseImportText()
+          configRequest('/config/import', { method: 'POST', body: { sheet: sheet, apply: false } })
+            .then(function (value) {
+              setPreview(value)
+              setNotice(value.changes.length === 0 ? '配置无变化' : '预览完成，确认后应用')
+            })
+            .catch(function (failure) { setError(failure.message) })
+            .then(function () { setPreviewing(false) })
+        } catch (failure) {
+          setError(failure.message)
+          setPreviewing(false)
+        }
+      }
+
+      function applyImport() {
+        setApplying(true)
+        setError('')
+        setNotice('')
+        try {
+          var sheet = parseImportText()
+          configRequest('/config/import', { method: 'POST', body: { sheet: sheet, apply: true } })
+            .then(function (value) {
+              setPreview(value)
+              setNotice('配置已导入')
+              return loadConfig()
+            })
+            .catch(function (failure) { setError(failure.message) })
+            .then(function () { setApplying(false) })
+        } catch (failure) {
+          setError(failure.message)
+          setApplying(false)
+        }
+      }
+
+      if (!config && error) {
+        return h(Card, { title: '配置', right: h(Chip, { tone: 'err' }, '不可用') }, h('div', { className: 'cb-error' }, error))
+      }
+      if (!config || !draft) {
+        return h(Card, { title: '配置' }, h('div', { className: 'cb-empty' }, '加载中…'))
+      }
+
+      var embedding = draft.embedding
+
+      return h('div', null,
+        error ? h(Banner, { tone: 'error' }, error) : null,
+        notice ? h(Banner, null, notice) : null,
+        h('div', { className: 'cb-form-row', style: { marginBottom: 10 } },
+          h('button', { type: 'button', className: 'cb-btn primary', disabled: saving, onClick: save }, saving ? '保存中…' : '保存配置'),
+          h('span', { className: 'cb-card-sub' }, '保存到 stateDir/inference.json'),
+        ),
+        h(Card, { title: '数据库', sub: 'memory subsystem 基础设施' },
+          h(KV, { label: 'PostgreSQL' }, config.database.postgresVersion || '—'),
+          h(KV, { label: 'pgvector' }, config.database.pgvectorVersion || '—'),
+          h(KV, { label: '备份目录', mono: true }, config.database.backupDir),
+          h('div', { className: 'cb-card-sub', style: { marginTop: 6, whiteSpace: 'normal' } },
+            '数据库版本更新请到「数据库 → 组件」手动执行；配置单会导出当前版本，导入只对比提示，不会自动升级。',
+          ),
+        ),
+        h(Card, { title: 'Embedding', sub: '召回向量 · embedding 方案' },
+          h(ConfigSelect, {
+            label: '模式',
+            value: embedding.mode,
+            options: [['remote', '远端 embedding service'], ['llama', 'llama.cpp 本地推理']],
+            onChange: function (value) { update(['embedding', 'mode'], value) },
+          }),
+          h(ConfigNumber, { label: '向量维度 dimensions', value: embedding.dimensions, min: 1, max: 4096, hint: 'vector 可存、也可精确检索 4096 维；但 HNSW/IVFFlat 索引上限为 vector 2000 / halfvec 4000。>2000 建议 halfvec（≤4000）或截断；4096 不建索引可精确扫描，建索引需截断。', onChange: function (value) { update(['embedding', 'dimensions'], value) } }),
+          embedding.mode === 'remote'
+            ? h('div', null,
+                h(ConfigText, { label: 'Base URL', value: embedding.remote.baseUrl, placeholder: 'https://...', onChange: function (value) { update(['embedding', 'remote', 'baseUrl'], value) } }),
+                h(ConfigText, { label: 'Model', value: embedding.remote.model, onChange: function (value) { update(['embedding', 'remote', 'model'], value) } }),
+                h(ConfigText, { label: 'Embeddings path', value: embedding.remote.path, onChange: function (value) { update(['embedding', 'remote', 'path'], value) } }),
+                h(ConfigText, { label: 'API Key', type: 'password', value: embedding.remote.apiKey, placeholder: embedding.remote.hasApiKey ? '已设置，留空保持不变' : '可留空', onChange: function (value) { update(['embedding', 'remote', 'apiKey'], value) } }),
+                h(ConfigNumber, { label: 'Batch size', value: embedding.remote.batchSize, min: 1, max: 512, onChange: function (value) { update(['embedding', 'remote', 'batchSize'], value) } }),
+              )
+            : h('div', null,
+                h(ConfigText, { label: 'GGUF 模型路径', value: embedding.llama.model, placeholder: 'C:\\models\\embedding.gguf', onChange: function (value) { update(['embedding', 'llama', 'model'], value) } }),
+                h('div', { className: 'cb-field-grid' },
+                  h(ConfigSelect, { label: '后端', value: embedding.llama.backend, options: ['auto', 'cpu', 'cuda', 'vulkan'], onChange: function (value) { update(['embedding', 'llama', 'backend'], value) } }),
+                  h(ConfigNumber, { label: 'GPU layers', value: embedding.llama.gpuLayers, min: 0, max: 999, onChange: function (value) { update(['embedding', 'llama', 'gpuLayers'], value) } }),
+                  h(ConfigNumber, { label: '端口', value: embedding.llama.port, min: 1, max: 65535, onChange: function (value) { update(['embedding', 'llama', 'port'], value) } }),
+                ),
+              ),
+        ),
+        h(Card, {
+          title: '设备',
+          sub: devices && devices.recommended ? '推荐 ' + devices.recommended : '检测中',
+          right: h('button', { type: 'button', className: 'cb-btn ghost', onClick: refreshDevices }, '刷新'),
+        },
+          h(ConfigSelect, {
+            label: '设备偏好',
+            value: draft.device.prefer,
+            options: ['auto', 'cpu', 'cuda', 'vulkan'],
+            onChange: function (value) { update(['device', 'prefer'], value) },
+          }),
+          devices
+            ? h('div', null,
+                h(KV, { label: 'CPU' }, devices.cpu.model + ' · ' + devices.cpu.cores + ' cores'),
+                devices.gpus && devices.gpus.length > 0
+                  ? devices.gpus.map(function (gpu, index) {
+                      return h(KV, { key: 'gpu-' + index, label: 'GPU ' + (index + 1) }, gpu.name + (gpu.memory ? ' · ' + gpu.memory : ''))
+                    })
+                  : h('div', { className: 'cb-empty' }, '未检测到 GPU'),
+                h(KV, { label: '可用后端' }, (devices.backends || []).join(', ')),
+                h(KV, { label: 'CUDA' }, devices.cudaVersion || '—'),
+                h(KV, { label: '驱动' }, devices.driverVersion || '—'),
+              )
+            : h('div', { className: 'cb-empty' }, '设备检测中…'),
+        ),
+        h(Card, { title: '配置单', sub: 'JSON 导入 / 导出' },
+          h('label', { className: 'cb-checkbox' },
+            h('input', { type: 'checkbox', checked: includeSecrets, onChange: function (event) { setIncludeSecrets(event.target.checked) } }),
+            '导出时包含明文 API Key',
+          ),
+          h('div', { className: 'cb-form-row' },
+            h('button', { type: 'button', className: 'cb-btn', disabled: exporting, onClick: exportConfig }, exporting ? '导出中…' : '导出配置单'),
+            h('input', { className: 'cb-file', type: 'file', accept: '.json,application/json', onChange: readImportFile }),
+          ),
+          h('div', { className: 'cb-card-sub', style: { marginTop: 6, whiteSpace: 'normal' } }, '默认导出会脱敏 API Key；导入时留空的 Key 保持现有值。'),
+          h('textarea', {
+            className: 'cb-textarea',
+            style: { minHeight: 90, marginTop: 8 },
+            spellCheck: false,
+            placeholder: '粘贴配置单 JSON，或选择文件…',
+            value: importText,
+            onChange: function (event) { setImportText(event.target.value); setPreview(null) },
+          }),
+          h('div', { className: 'cb-form-row' },
+            h('button', { type: 'button', className: 'cb-btn', disabled: previewing, onClick: previewImport }, previewing ? '预览中…' : '预览导入'),
+            h('button', { type: 'button', className: 'cb-btn primary', disabled: applying || preview === null, onClick: applyImport }, applying ? '应用中…' : '应用导入'),
+          ),
+          preview
+            ? h('div', null,
+                h('div', { className: 'cb-section-label' }, '变更'),
+                preview.changes.length === 0
+                  ? h('div', { className: 'cb-empty' }, '无变化')
+                  : preview.changes.map(function (change) {
+                      return h('div', { className: 'cb-list-row', key: change.path },
+                        h('div', { className: 'cb-list-main' },
+                          h('span', { className: 'cb-code' }, change.path),
+                          h('span', { className: 'cb-card-sub' }, String(change.from) + ' → ' + String(change.to)),
+                        ),
+                      )
+                    }),
+                preview.warnings && preview.warnings.length > 0
+                  ? h('div', { style: { marginTop: 8 } },
+                      h('div', { className: 'cb-section-label' }, '提示'),
+                      preview.warnings.map(function (warning, index) {
+                        return h('div', { className: 'cb-card-sub', key: index, style: { whiteSpace: 'normal' } }, warning)
+                      }),
+                    )
+                  : null,
+              )
+          : null,
+        ),
+      )
+    }
+
+    function niceScaleMax(value) {
+      if (!Number.isFinite(value) || value <= 0) return 10
+      const steps = [1, 2, 5, 10, 20, 25, 50, 100]
+      for (const step of steps) {
+        if (value <= step) return step
+      }
+      return Math.ceil(value / 100) * 100
+    }
+
+    function Sparkline(props) {
+      var values = (props.values || []).filter(function (value) { return typeof value === 'number' && Number.isFinite(value) })
+      var format = props.formatValue || function (value) { return Math.round(value) + '%' }
+      var dataMin = values.length > 0 ? Math.min.apply(null, values) : 0
+      var dataMax = values.length > 0 ? Math.max.apply(null, values) : 0
+      var range = dataMax - dataMin
+      var padding = Math.max(range * 0.15, Math.abs(dataMax) * 0.03, props.percent === false ? 0 : 0.5)
+      var min
+      var max
+      if (props.percent === false) {
+        min = Math.max(0, dataMin - padding)
+        max = dataMax + padding
+      } else {
+        max = niceScaleMax(dataMax + padding)
+        min = Math.max(0, Math.floor((dataMin - padding) / 5) * 5)
+      }
+      if (!Number.isFinite(max) || max <= min) max = min + 1
+      var span = max - min
+      var points = values.map(function (value, index) {
+        var x = values.length === 1 ? 0 : (index / (values.length - 1)) * 100
+        var y = 28 - Math.max(0, Math.min(1, (value - min) / span)) * 26
+        return x.toFixed(2) + ',' + y.toFixed(2)
+      }).join(' ')
+      return h('div', { className: 'cb-spark-wrap' },
+        h('div', { className: 'cb-spark-scale' },
+          h('span', null, format(max)),
+          h('span', null, format((min + max) / 2)),
+          h('span', null, format(min)),
+        ),
+        h('div', { className: 'cb-spark-plot' },
+          values.length >= 2
+            ? h('svg', { className: 'cb-spark ' + (props.className || ''), viewBox: '0 0 100 30', preserveAspectRatio: 'none' },
+                h('polyline', { points: points }),
+              )
+            : h('div', { className: 'cb-spark-empty' }, '采样中'),
+        ),
+      )
+    }
+
+    function RingChart(props) {
+      var percent = Number(props.percent)
+      if (!Number.isFinite(percent)) percent = 0
+      percent = Math.max(0, Math.min(100, percent))
+      var radius = 15
+      var circumference = 2 * Math.PI * radius
+      return h('svg', { className: 'cb-ring', viewBox: '0 0 40 40' },
+        h('circle', { className: 'cb-ring-bg', cx: 20, cy: 20, r: radius }),
+        h('circle', {
+          className: 'cb-ring-fg',
+          cx: 20,
+          cy: 20,
+          r: radius,
+          strokeDasharray: circumference.toFixed(2),
+          strokeDashoffset: (circumference * (1 - percent / 100)).toFixed(2),
+          transform: 'rotate(-90 20 20)',
+        }),
+        h('text', { className: 'cb-ring-text', x: 20, y: 21, textAnchor: 'middle', dominantBaseline: 'middle' }, Math.round(percent) + '%'),
+      )
+    }
+
+    function ResourceTile(props) {
+      if (props.ringPercent !== undefined) {
+        var rows = props.ringRows || []
+        return h('div', { className: 'cb-resource cb-resource-ring' },
+          h('div', { className: 'cb-resource-label' }, props.label),
+          h('div', { className: 'cb-ring-wrap' },
+            h(RingChart, { percent: props.ringPercent }),
+            h('div', { className: 'cb-ring-copy' },
+              rows.length > 0
+                ? rows.map(function (row, index) {
+                    return h('div', { className: 'cb-ring-row', key: index },
+                      h('span', { className: 'cb-ring-key' }, row.label),
+                      h('span', { className: 'cb-ring-val' }, row.value),
+                    )
+                  })
+                : h('div', null,
+                    h('div', { className: 'cb-resource-value' }, props.value),
+                    h('div', { className: 'cb-resource-sub' }, props.sub),
+                  ),
+            ),
+          ),
+        )
+      }
+      return h('div', { className: 'cb-resource' },
+        h('div', { className: 'cb-resource-label' }, props.label),
+        h('div', { className: 'cb-resource-value' }, props.value),
+        h('div', { className: 'cb-resource-sub' }, props.sub),
+        props.series ? h(Sparkline, {
+          values: props.series,
+          className: props.className,
+          formatValue: props.formatValue,
+          percent: props.percent,
+        }) : null,
+      )
+    }
+
+    function embeddingMonitorInfo(monitor, mode) {
+      var remote = mode === 'remote'
+      if (!monitor) {
+        return { tone: 'idle', label: '检测中', description: '正在读取 embedding 服务状态。' }
+      }
+      if (monitor.operation && monitor.operation.phase) {
+        var starting = monitor.operation.phase === 'starting'
+        return {
+          tone: 'warn',
+          label: starting ? '启动中' : '处理中',
+          description: monitor.operation.message || (starting ? '正在启动 llama.cpp embedding 服务。' : 'embedding 服务正在处理中。'),
+        }
+      }
+      if (remote) {
+        if (!monitor.endpoint) return { tone: 'idle', label: '未配置', description: '尚未配置远端 embedding endpoint。' }
+        return monitor.available
+          ? { tone: 'ok', label: '可用', description: '远端 embedding endpoint 可访问：' + monitor.endpoint }
+          : { tone: 'err', label: '不可用', description: '无法访问远端 embedding endpoint：' + monitor.endpoint }
+      }
+      if (monitor.running) {
+        return { tone: 'ok', label: '运行中', description: 'llama-server 正在 ' + monitor.endpoint + ' 接受请求。' }
+      }
+      return { tone: 'warn', label: '已停止', description: 'llama-server 未运行；可在配置页启动。' }
+    }
+
+    function baseNameOf(filePath) {
+      var parts = String(filePath || '').split(/[\\/]/)
+      return parts[parts.length - 1] || '—'
+    }
+
+    function EmbeddingStatusPage(props) {
+      var monitor = props.monitor
+      var mode = (monitor && monitor.mode) || props.mode || 'remote'
+      var isRemote = mode === 'remote'
+      var llama = monitor && monitor.llama
+      var resources = monitor && monitor.resources
+      var usage = (monitor && monitor.usage) || { total: 0, success: 0, failure: 0, recent: [] }
+      var info = embeddingMonitorInfo(monitor, mode)
+      var gpu = resources && resources.gpu
+      var ram = resources && resources.ram
+      var cpu = resources && resources.cpu
+      var installed = props.installed === true
+      var llamaRunning = props.running !== undefined ? props.running : Boolean(monitor && monitor.running)
+      var starting = Boolean(monitor && monitor.operation && monitor.operation.phase === 'starting')
+      var historyState = useState([])
+      var resourceHistory = historyState[0]
+      var setResourceHistory = historyState[1]
+      useEffect(function () {
+        if (!monitor || !monitor.resources) return
+        var sample = {
+          cpu: monitor.resources.cpu ? monitor.resources.cpu.usagePercent : null,
+          gpu: monitor.resources.gpu ? monitor.resources.gpu.utilPercent : null,
+          ram: monitor.resources.ram ? monitor.resources.ram.usedBytes : null,
+        }
+        setResourceHistory(function (previous) {
+          return previous.concat(sample).slice(-180)
+        })
+      }, [monitor])
+      function seriesOf(key) {
+        return resourceHistory.map(function (sample) { return sample[key] }).filter(function (value) { return typeof value === 'number' && Number.isFinite(value) })
+      }
+      var cpuHistory = seriesOf('cpu')
+      var gpuHistory = seriesOf('gpu')
+      var ramHistory = seriesOf('ram')
+      var ramPercent = ram && ram.systemTotalBytes ? Math.round((ram.usedBytes / ram.systemTotalBytes) * 100) : null
+      var buckets = usage.buckets || []
+      var maxBucket = Math.max(1, ...buckets.map(function (bucket) { return bucket.total }))
+      function hourLabel(value) {
+        try { return new Date(value).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) } catch (error) { return '' }
+      }
+      var dimensions = props.dimensions || '—'
+      function time(value) {
+        if (!value) return '—'
+        try { return new Date(value).toLocaleTimeString() } catch (error) { return String(value) }
+      }
+      function gpuText() {
+        if (!gpu) return '—'
+        return (gpu.usedMiB === null || gpu.usedMiB === undefined ? '—' : gpu.usedMiB + ' MiB') + ' / ' + (gpu.totalMiB === null || gpu.totalMiB === undefined ? '—' : gpu.totalMiB + ' MiB')
+      }
+      var actions = []
+      if (!isRemote && installed) {
+        if (starting) {
+          actions.push(h('button', { key: 'starting', type: 'button', className: 'cb-btn primary', disabled: true }, '启动中…'))
+        } else if (llamaRunning) {
+          actions.push(h('button', { key: 'stop', type: 'button', className: 'cb-btn', disabled: props.actionBusy, onClick: props.onStop }, props.actionBusy ? '处理中…' : '停止'))
+          actions.push(h('button', { key: 'restart', type: 'button', className: 'cb-btn', disabled: props.actionBusy, onClick: props.onStart }, props.actionBusy ? '处理中…' : '重启'))
+        } else {
+          actions.push(h('button', { key: 'start', type: 'button', className: 'cb-btn primary', disabled: props.actionBusy, onClick: props.onStart }, props.actionBusy ? '启动中…' : '启动'))
+        }
+      }
+      actions.push(h('button', { key: 'probe', type: 'button', className: 'cb-btn primary', disabled: props.busy, onClick: props.onProbe }, props.busy ? '测试中…' : '测试调用'))
+      actions.push(h('button', { key: 'refresh', type: 'button', className: 'cb-btn ghost', onClick: props.onRefresh }, '刷新'))
+      return h('div', null,
+        props.error ? h(Banner, { tone: 'error' }, props.error) : null,
+        h(Card, {
+          title: '服务状态',
+          sub: isRemote ? '远端 embedding service' : 'llama.cpp 本地推理',
+          right: h(Chip, null, isRemote ? 'remote' : 'llama.cpp'),
+        },
+          h('div', { className: 'cb-hero-head' },
+            h(Dot, { tone: info.tone }),
+            h('span', { className: 'cb-hero-state' }, info.label),
+            h(Chip, { tone: info.tone === 'ok' ? 'ok' : info.tone === 'err' ? 'err' : info.tone === 'warn' ? 'warn' : null }, isRemote ? 'embedding' : (llama && llama.backend ? llama.backend : 'local')),
+          ),
+          h('div', { className: 'cb-hero-desc' }, info.description),
+          h('div', { className: 'cb-metrics' },
+            isRemote
+              ? [
+                  h(Metric, { key: 'endpoint', label: 'Endpoint', value: (monitor && monitor.remote && monitor.remote.baseUrl) || '—', hint: (monitor && monitor.remote && monitor.remote.path) || '' }),
+                  h(Metric, { key: 'model', label: 'Model', value: (monitor && monitor.remote && monitor.remote.model) || '—', hint: '远端 embedding' }),
+                  h(Metric, { key: 'available', label: '可用性', value: monitor ? (monitor.available ? 'available' : 'unavailable') : 'checking', hint: '最近检查 ' + time(monitor && monitor.checkedAt) }),
+                  h(Metric, { key: 'calls', label: '调用量', value: String(usage.total), hint: '成功 ' + usage.success + ' / 失败 ' + usage.failure }),
+                ]
+              : [
+                  h(Metric, { key: 'model', label: '模型', value: baseNameOf(llama && llama.model), hint: 'llama.cpp GGUF' }),
+                  h(Metric, { key: 'backend', label: '后端', value: (llama && llama.backend) || '—', hint: (llama && llama.build) || 'llama.cpp' }),
+                  h(Metric, { key: 'dimensions', label: '向量维度', value: String(dimensions), hint: 'embedding dimensions' }),
+                  h(Metric, { key: 'calls', label: '调用量', value: String(usage.total), hint: '成功 ' + usage.success + ' / 失败 ' + usage.failure }),
+                ],
+          ),
+          h('div', { className: 'cb-actions' }, actions),
+        ),
+        !isRemote
+          ? h(Card, { title: '资源占用', sub: '实时采样 · 任务管理器风格', right: h(Chip, null, 'live') },
+              h('div', { className: 'cb-resource-grid' },
+                h(ResourceTile, {
+                  label: 'CPU',
+                  value: cpu && cpu.usagePercent !== null && cpu.usagePercent !== undefined ? Math.round(cpu.usagePercent) + '%' : '—',
+                  sub: cpu ? String(cpu.cores) + ' cores' : '—',
+                  series: cpuHistory,
+                  className: 'cpu',
+                  percent: true,
+                }),
+                h(ResourceTile, {
+                  label: 'GPU',
+                  value: gpu && gpu.utilPercent !== null && gpu.utilPercent !== undefined ? String(gpu.utilPercent) + '%' : '—',
+                  sub: gpu ? 'VRAM ' + gpuText() : '—',
+                  series: gpuHistory,
+                  className: 'gpu',
+                  percent: true,
+                }),
+                h(ResourceTile, {
+                  label: '内存',
+                  value: ramPercent !== null ? String(ramPercent) + '%' : '—',
+                  sub: ram ? formatBytes(ram.usedBytes) + ' / ' + formatBytes(ram.systemTotalBytes) : '—',
+                  series: ramHistory,
+                  className: 'ram',
+                  percent: false,
+                  formatValue: formatBytes,
+                }),
+                h(ResourceTile, {
+                  label: 'llama 显存',
+                  ringPercent: gpu && gpu.totalMiB ? (gpu.llamaMiB / gpu.totalMiB) * 100 : 0,
+                  ringRows: [
+                    { label: '总 VRAM', value: gpu && gpu.totalMiB ? gpu.totalMiB + ' MiB' : '—' },
+                    { label: '已用', value: gpu && gpu.usedMiB !== null && gpu.usedMiB !== undefined ? gpu.usedMiB + ' MiB' : '—' },
+                    { label: 'llama', value: gpu && gpu.llamaMiB !== null && gpu.llamaMiB !== undefined ? gpu.llamaMiB + ' MiB' : '—' },
+                    { label: '进程内存', value: ram && ram.llamaBytes ? formatBytes(ram.llamaBytes) : '—' },
+                  ],
+                }),
+              ),
+            )
+          : null,
+        h(Card, { title: '调用统计', sub: '最近 24 小时 · 明细 10 次', right: h(Chip, null, String(usage.total) + ' calls') },
+          h('div', { className: 'cb-metrics' },
+            h(Metric, { label: '总调用', value: String(usage.total) }),
+            h(Metric, { label: '成功', value: String(usage.success) }),
+            h(Metric, { label: '失败', value: String(usage.failure) }),
+            h(Metric, { label: '最近耗时', value: usage.recent.length > 0 ? String(usage.recent[0].durationMs) + ' ms' : '—' }),
+          ),
+          buckets.length > 0
+            ? h('div', null,
+                h('div', { className: 'cb-section-label' }, '最近 24 小时调用分布'),
+                h('div', { className: 'cb-bars' }, buckets.map(function (bucket, index) {
+                  var height = bucket.total === 0 ? 0 : Math.max(2, Math.round((bucket.total / maxBucket) * 100))
+                  return h('div', {
+                    className: 'cb-bar',
+                    key: index,
+                    title: hourLabel(bucket.start) + ' · ' + bucket.total + ' calls（成功 ' + bucket.success + ' / 失败 ' + bucket.failure + '）',
+                  }, h('div', {
+                    className: 'cb-bar-fill' + (bucket.failure > 0 ? ' is-fail' : ''),
+                    style: { height: height + '%' },
+                  }))
+                })),
+                h('div', { className: 'cb-bar-labels' },
+                  h('span', null, hourLabel(buckets[0].start)),
+                  h('span', null, '现在'),
+                ),
+              )
+            : null,
+          usage.recent.length === 0
+            ? h('div', { className: 'cb-empty' }, '暂无调用；检索链路接入后会自动累计，也可以点「测试调用」验证端点。')
+            : h('div', null,
+                h('div', { className: 'cb-section-label' }, '最近 10 次调用'),
+                usage.recent.slice(0, 10).map(function (entry, index) {
+                return h('div', { className: 'cb-list-row', key: index },
+                  h('div', { className: 'cb-list-main', style: { display: 'block', minWidth: 0 } },
+                    h('div', null,
+                      h('span', { className: 'cb-code' }, entry.ok ? 'OK' : 'FAIL'),
+                      ' ',
+                      entry.mode + ' · ' + time(entry.at),
+                    ),
+                    h('div', { className: 'cb-card-sub wrap' },
+                      (entry.inputs || 1) + ' inputs · ' + (entry.dimensions || '?') + ' dim · ' + entry.durationMs + ' ms · ' + (entry.error || entry.endpoint || '—'),
+                    ),
+                  ),
+                  h('div', { className: 'cb-list-side' }, entry.ok ? 'success' : 'error'),
+                )
+              }),
+            ),
+          ),
+        )
+    }
+
+    function EmbeddingPage() {
+      var statusState = useState(null)
+      var status = statusState[0]
+      var setStatus = statusState[1]
+      var configState = useState(null)
+      var config = configState[0]
+      var setConfig = configState[1]
+      var devicesState = useState(null)
+      var devices = devicesState[0]
+      var setDevices = devicesState[1]
+      var draftState = useState(null)
+      var draft = draftState[0]
+      var setDraft = draftState[1]
+      var errorState = useState('')
+      var error = errorState[0]
+      var setError = errorState[1]
+      var noticeState = useState('')
+      var notice = noticeState[0]
+      var setNotice = noticeState[1]
+      var savingState = useState(false)
+      var saving = savingState[0]
+      var setSaving = savingState[1]
+      var actionBusyState = useState(false)
+      var actionBusy = actionBusyState[0]
+      var setActionBusy = actionBusyState[1]
+      var backendState = useState('vulkan')
+      var backend = backendState[0]
+      var setBackend = backendState[1]
+      var browseOpenState = useState(false)
+      var browseOpen = browseOpenState[0]
+      var setBrowseOpen = browseOpenState[1]
+      var browseDataState = useState(null)
+      var browseData = browseDataState[0]
+      var setBrowseData = browseDataState[1]
+      var browsePathState = useState('')
+      var browsePath = browsePathState[0]
+      var setBrowsePath = browsePathState[1]
+      var tabState = useState('status')
+      var tab = tabState[0]
+      var setTab = tabState[1]
+      var monitorState = useState(null)
+      var monitor = monitorState[0]
+      var setMonitor = monitorState[1]
+      var probeBusyState = useState(false)
+      var probeBusy = probeBusyState[0]
+      var setProbeBusy = probeBusyState[1]
+
+      var loadStatus = useCallback(function () {
+        return embeddingRequest('/status')
+          .then(function (value) { setStatus(value) })
+          .catch(function (failure) { setError(failure.message) })
+      }, [])
+
+      var loadConfig = useCallback(function () {
+        return configRequest('/config')
+          .then(function (value) {
+            setConfig(value)
+            setDraft({ embedding: cloneJson(value.embedding), device: cloneJson(value.device) })
+          })
+          .catch(function (failure) { setError(failure.message) })
+      }, [])
+
+      var loadDevices = useCallback(function () {
+        return configRequest('/config/devices')
+          .then(function (value) { setDevices(value) })
+          .catch(function (failure) { setError(failure.message) })
+      }, [])
+
+      var loadMonitor = useCallback(function () {
+        return embeddingRequest('/monitor')
+          .then(function (value) { setMonitor(value) })
+          .catch(function () { setMonitor(null) })
+      }, [])
+
+      var pageReady = Boolean(status && config)
+
+      useEffect(function () {
+        loadStatus()
+        loadConfig()
+      }, [loadStatus, loadConfig])
+
+      useEffect(function () {
+        if (tab !== 'config' || devices) return
+        loadDevices()
+      }, [tab, devices, loadDevices])
+
+      useEffect(function () {
+        var timer = setInterval(loadStatus, 1500)
+        return function () { clearInterval(timer) }
+      }, [loadStatus])
+
+      useEffect(function () {
+        if (!pageReady) return
+        loadMonitor()
+        var timer = setInterval(loadMonitor, 2000)
+        return function () { clearInterval(timer) }
+      }, [pageReady, loadMonitor])
+
+      useEffect(function () {
+        if (!notice) return
+        var timer = setTimeout(function () { setNotice('') }, 3500)
+        return function () { clearTimeout(timer) }
+      }, [notice])
+
+      useEffect(function () {
+        if (status && status.llama && status.llama.backend) setBackend(status.llama.backend)
+      }, [status])
+
+      useEffect(function () {
+        if (!status || status.installed) return
+        const recommended = (status.assets || []).find(function (asset) { return asset.recommended })
+        if (recommended) {
+          setBackend(recommended.backend)
+          return
+        }
+        if (!devices || !devices.recommended) return
+        setBackend(devices.recommended === 'cuda' ? 'cuda' : devices.recommended === 'vulkan' ? 'vulkan' : 'cpu')
+      }, [devices, status && status.installed])
+
+      function update(parts, value) {
+        setDraft(function (previous) { return setJsonPath(previous, parts, value) })
+      }
+
+      function selectBackend(value) {
+        setBackend(value)
+        update(['embedding', 'llama', 'gpuLayers'], value === 'cpu' ? 0 : 999)
+        update(['embedding', 'llama', 'backend'], value === 'cuda13' ? 'auto' : value)
+      }
+
+      function probeEmbedding() {
+        setProbeBusy(true)
+        setError('')
+        setNotice('')
+        embeddingRequest('/probe', { method: 'POST' })
+          .then(function () { return loadMonitor() })
+          .catch(function (failure) { setError(failure.message) })
+          .finally(function () { setProbeBusy(false) })
+      }
+
+      function askDshForModel() {
+        var gpuNames = devices && devices.gpus && devices.gpus.length > 0
+          ? devices.gpus.map(function (gpu) { return gpu.name + (gpu.memory ? '（' + gpu.memory + '）' : '') }).join(', ')
+          : '未检测到 GPU'
+        var cpuText = devices && devices.cpu && devices.cpu.cores ? String(devices.cpu.cores) + ' 核' : '未知'
+        var ramText = devices && devices.memoryBytes ? (devices.memoryBytes / 1024 / 1024 / 1024).toFixed(1) + ' GB' : '未知'
+        var cudaText = (status && status.deviceCudaVersion) || (devices && devices.cudaVersion) || '未知'
+        var driverText = (devices && devices.driverVersion) || '未知'
+        var modeText = draft.embedding.mode === 'remote' ? '远端 embedding service' : 'llama.cpp 本地推理'
+        var modelName = baseNameOf(draft.embedding.llama.model) || '未选择'
+        var runtimeText = status && status.installed && status.llama
+          ? status.llama.build + ' / ' + status.llama.backend
+          : '未安装'
+        var runningText = status && status.running ? 'running' : 'stopped'
+        var candidates = (status.models || []).map(function (model) {
+          return model.name + '（' + model.params + ', ' + model.dimensions + 'd）'
+        }).join('、') || '暂无'
+        var prompt = [
+          '请帮我为 dsh-claybot 的 Memory → 嵌入服务配置 llama.cpp 本地 embedding。先不要直接改配置或下载大模型，先调研并给方案。',
+          '',
+          '【当前设备】',
+          'GPU：' + gpuNames,
+          'CUDA：' + cudaText,
+          '驱动：' + driverText,
+          'CPU：' + cpuText,
+          '内存：' + ramText,
+          '',
+          '【当前状态】',
+          '模式：' + modeText,
+          '维度：' + draft.embedding.dimensions,
+          '当前模型：' + modelName,
+          '运行时：' + runtimeText,
+          '服务状态：' + runningText,
+          '内置候选模型（仅作参考，绝不是可选项上限）：',
+          candidates,
+          '',
+          '【任务】',
+          '1. 先检查 dsh-claybot 的现有实现和配置，重点看：',
+          '   - packages/memory/lib/embedding.js',
+          '   - packages/memory/lib/config.js',
+          '   - packages/memory/lib/gguf.js',
+          '   - plans/plan.md',
+          '   - plans/impl-embedding.md',
+          '   以及当前 state（~/.dsh/claybot）和正在运行的 llama-server 状态。',
+          '2. 不要只从上面内置列表里选。内置列表只是对照，不是限制。请主动联网搜索 Hugging Face、ModelScope、GitHub 等来源，寻找更适合本机显存和用途的 GGUF embedding 模型，包括不在内置列表里的新模型。中文、多语言、长上下文、代码等方向都请按实际情况评估。',
+          '3. 对候选模型尽量核实：llama.cpp 是否兼容（architecture、pooling、context、embedding length、MRL）、参数量、向量维度、最大上下文、量化与文件大小、下载链接与 SHA-256、许可证，以及显存/内存占用估算。',
+          '4. 结合当前存储/索引策略判断维度是否合适：n < 2000 用 vector(n) + 全维 vector HNSW；2000 ≤ n ≤ 4000 用 halfvec(n) + 全维 halfvec HNSW；n > 4000 存 halfvec(n)，只索引前 4000 维 halfvec + 全量 rerank，并且需要 MRL。如果候选维度需要截断或换模型，请说明影响。',
+          '5. 给出 3 个左右候选的对比表，并明确推荐一个；说明它比内置列表里的模型强在哪里，或者说明内置列表已经够用。',
+          '6. 最后给出可执行的安装/下载/配置步骤：目标目录、GGUF 路径、维度、context、pooling、是否需要重建索引、如何验证 embedding 维度和端点健康。任何大文件下载、配置修改或服务重启前都先向我确认。',
+          '',
+          '要求：优先使用官方模型卡/仓库和可验证来源；不要编造 SHA、下载链接或 llama.cpp 兼容性。先给调研结论和方案，等我确认后再动手。',
+        ].join('\n')
+        function copyPrompt() {
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(prompt)
+              .then(function () { setNotice('工作区服务不可用，已复制请求；粘贴到对话里发送即可') })
+              .catch(function (failure) { setError('复制请求失败：' + (failure instanceof Error ? failure.message : String(failure))) })
+          } else {
+            setError('工作区服务不可用，且当前环境不支持剪贴板')
+          }
+        }
+        var workspace = null
+        try {
+          if (clientCtx && typeof clientCtx.get === 'function') workspace = clientCtx.get('uiWorkspace')
+        } catch (error) {
+          workspace = null
+        }
+        if (!workspace || typeof workspace.startSession !== 'function') {
+          copyPrompt()
+          return
+        }
+        try {
+          workspace.startSession(undefined, { prompt: prompt, whenDraftExists: 'append' })
+          setNotice('已打开新对话并填入配置请求，发送后 AI 会继续')
+        } catch (error) {
+          copyPrompt()
+        }
+      }
+
+      function saveConfig() {
+        setSaving(true)
+        setError('')
+        setNotice('')
+        return configRequest('/config', {
+          method: 'PUT',
+          body: { embedding: draft.embedding, device: draft.device, database: { backupDir: config.database.backupDir } },
+        })
+          .then(function (value) {
+            setConfig(value)
+            setDraft({ embedding: cloneJson(value.embedding), device: cloneJson(value.device) })
+            setNotice('配置已保存')
+            return loadStatus()
+          })
+          .catch(function (failure) {
+            setError(failure.message)
+            throw failure
+          })
+          .finally(function () { setSaving(false) })
+      }
+
+      function installRuntime() {
+        const asset = (status.assets || []).find(function (item) { return item.backend === backend })
+        if (asset && asset.installable === false) {
+          setError('当前驱动 CUDA ' + (status.deviceCudaVersion || '未知') + ' 无法使用 ' + asset.label + '；请更新显卡驱动')
+          return
+        }
+        setActionBusy(true)
+        setError('')
+        setNotice('')
+        embeddingRequest('/install', { method: 'POST', body: { backend: backend, confirm: true } })
+          .then(function () { setNotice('llama.cpp 安装已开始'); return loadStatus() })
+          .catch(function (failure) { setError(failure.message) })
+          .finally(function () { setActionBusy(false) })
+      }
+
+      function downloadModel(model) {
+        setActionBusy(true)
+        setError('')
+        setNotice('')
+        embeddingRequest('/models/download', { method: 'POST', body: { modelId: model.id, confirm: true } })
+          .then(function () { setNotice('模型下载已开始'); return loadStatus() })
+          .catch(function (failure) { setError(failure.message) })
+          .finally(function () { setActionBusy(false) })
+      }
+
+      function applyModelDefaults(model) {
+        update(['embedding', 'mode'], 'llama')
+        update(['embedding', 'llama', 'model'], model.path)
+        update(['embedding', 'dimensions'], model.dimensions)
+        update(['embedding', 'llama', 'pooling'], model.pooling)
+        if (model.contextSize) update(['embedding', 'llama', 'contextSize'], model.contextSize)
+      }
+
+      function applyGgufDefaults(metadata) {
+        if (metadata.dimensions && metadata.dimensions >= 1 && metadata.dimensions <= 4096) {
+          update(['embedding', 'dimensions'], metadata.dimensions)
+        }
+        if (metadata.contextSize) update(['embedding', 'llama', 'contextSize'], metadata.contextSize)
+        if (metadata.pooling) update(['embedding', 'llama', 'pooling'], metadata.pooling)
+      }
+
+      function inspectModelPath(filePath) {
+        if (typeof filePath !== 'string' || !/\.gguf$/i.test(filePath)) return
+        inspectGguf(filePath)
+          .then(function (metadata) {
+            applyGgufDefaults(metadata)
+            setNotice('已读取 GGUF 元数据：' + (metadata.architecture || 'unknown') + ' · ' + (metadata.dimensions || '?') + 'd · ctx ' + (metadata.maxContext || metadata.contextSize || '?') + (metadata.pooling ? ' · ' + metadata.pooling : ''))
+          })
+          .catch(function () {
+            setNotice('未能读取 GGUF 元数据，请在高级设置里手动确认维度/context')
+          })
+      }
+
+      function useModel(model) {
+        applyModelDefaults(model)
+        setNotice('已选择 ' + model.name + '：维度 / context / pooling 已按模型默认值带出，保存后生效')
+      }
+
+      function startService() {
+        setActionBusy(true)
+        setError('')
+        setNotice('')
+        var action = status.running ? 'restart' : 'start'
+        saveConfig()
+          .then(function () {
+            return embeddingRequest('/action', { method: 'POST', body: { action: action } })
+          })
+          .then(function () { return loadStatus() })
+          .catch(function (failure) { setError(failure.message) })
+          .finally(function () { setActionBusy(false) })
+      }
+
+      function stopService() {
+        setActionBusy(true)
+        setError('')
+        setNotice('')
+        embeddingRequest('/action', { method: 'POST', body: { action: 'stop' } })
+          .then(function () { return loadStatus() })
+          .catch(function (failure) { setError(failure.message) })
+          .finally(function () { setActionBusy(false) })
+      }
+
+      function loadBrowse(target) {
+        var path = target === undefined ? browsePath : target
+        embeddingRequest('/browse?path=' + encodeURIComponent(path || ''))
+          .then(function (value) {
+            setBrowseData(value)
+            setBrowsePath(value.path)
+          })
+          .catch(function (failure) { setError(failure.message) })
+      }
+
+      function openBrowse() {
+        setBrowseOpen(true)
+        var current = draft && draft.embedding && draft.embedding.llama ? draft.embedding.llama.model : ''
+        loadBrowse(current || '')
+      }
+
+      function chooseModelFile(file) {
+        update(['embedding', 'mode'], 'llama')
+        update(['embedding', 'llama', 'model'], file.path)
+        var matched = (status.models || []).find(function (model) { return model.path === file.path || model.file === file.name })
+        inspectGguf(file.path)
+          .then(function (metadata) {
+            applyGgufDefaults(metadata)
+            setNotice('已读取 GGUF 元数据：' + (metadata.architecture || 'unknown') + ' · ' + (metadata.dimensions || '?') + 'd · ctx ' + (metadata.maxContext || metadata.contextSize || '?') + (metadata.pooling ? ' · ' + metadata.pooling : ''))
+          })
+          .catch(function () {
+            if (matched) {
+              update(['embedding', 'dimensions'], matched.dimensions)
+              update(['embedding', 'llama', 'pooling'], matched.pooling)
+              if (matched.contextSize) update(['embedding', 'llama', 'contextSize'], matched.contextSize)
+              setNotice('已选择 ' + matched.name + '；未能读取文件头，已用推荐默认值')
+            } else {
+              setNotice('已选择本地模型：' + file.name + '；未能读取 GGUF 元数据，保持当前维度/context')
+            }
+          })
+        setBrowseOpen(false)
+      }
+
+      if (!status || !config || !draft) {
+        if (error) {
+          return h(Card, { title: '嵌入服务', right: h(Chip, { tone: 'err' }, '不可用') },
+            h('div', { className: 'cb-error' }, error),
+            h('div', { className: 'cb-hero-desc', style: { marginTop: 6, marginBottom: 0 } }, '这通常表示 memory embedding service 未加载，或 API 路由不可用。请确认 dsh-claybot-memory 已启用，然后刷新页面。'),
+          )
+        }
+        return h(Card, { title: '嵌入服务' }, h('div', { className: 'cb-empty' }, '加载中…'))
+      }
+
+      var embedding = draft.embedding
+      var assets = status.assets || []
+      var models = status.models || []
+      var operation = status.operation
+      var tabBar = h('div', { className: 'cb-seg cb-seg-mini' }, [
+        ['status', '运行状态'],
+        ['config', '配置'],
+      ].map(function (item) {
+        return h('button', {
+          key: item[0],
+          type: 'button',
+          className: 'cb-seg-btn' + (tab === item[0] ? ' is-active' : ''),
+          onClick: function () { setTab(item[0]) },
+        }, item[1])
+      }))
+      if (tab === 'status') {
+        return h('div', null,
+          tabBar,
+          h(EmbeddingStatusPage, {
+            monitor: monitor,
+            mode: embedding.mode,
+            dimensions: embedding.dimensions,
+            installed: status.installed,
+            running: status.running,
+            busy: probeBusy,
+            actionBusy: actionBusy,
+            onStart: startService,
+            onStop: stopService,
+            onProbe: probeEmbedding,
+            onRefresh: loadMonitor,
+            error: error,
+          }),
+        )
+      }
+      var remote = embedding.mode === 'remote'
+      var usage = (monitor && monitor.usage) || { total: 0, success: 0, failure: 0, recent: [] }
+      var info = embeddingMonitorInfo(monitor, embedding.mode)
+      var statusCard = h(Card, {
+        title: '服务状态',
+        sub: remote ? '远端 embedding service' : 'llama.cpp 本地推理',
+        right: h(Chip, null, remote ? 'remote' : 'llama.cpp'),
+      },
+        h('div', { className: 'cb-hero-head' },
+          h(Dot, { tone: info.tone }),
+          h('span', { className: 'cb-hero-state' }, info.label),
+          h(Chip, { tone: info.tone === 'ok' ? 'ok' : info.tone === 'err' ? 'err' : info.tone === 'warn' ? 'warn' : null }, remote ? 'embedding' : (status.llama && status.llama.backend ? status.llama.backend : 'local')),
+        ),
+        h('div', { className: 'cb-hero-desc' }, info.description),
+        h('div', { className: 'cb-metrics' },
+          remote
+            ? [
+                h(Metric, { key: 'endpoint', label: 'Endpoint', value: embedding.remote.baseUrl || '—', hint: embedding.remote.path || '' }),
+                h(Metric, { key: 'model', label: 'Model', value: embedding.remote.model || '—', hint: '远端 embedding' }),
+                h(Metric, { key: 'dimensions', label: '向量维度', value: String(embedding.dimensions), hint: 'embedding dimensions' }),
+                h(Metric, { key: 'calls', label: '调用量', value: String(usage.total), hint: '成功 ' + usage.success + ' / 失败 ' + usage.failure }),
+              ]
+            : [
+                h(Metric, { key: 'model', label: '模型', value: baseNameOf(embedding.llama.model), hint: 'llama.cpp GGUF' }),
+                h(Metric, { key: 'backend', label: '后端', value: (status.llama && status.llama.backend) || '—', hint: (status.llama && status.llama.build) || 'llama.cpp' }),
+                h(Metric, { key: 'dimensions', label: '向量维度', value: String(embedding.dimensions), hint: 'embedding dimensions' }),
+                h(Metric, { key: 'calls', label: '调用量', value: String(usage.total), hint: '成功 ' + usage.success + ' / 失败 ' + usage.failure }),
+              ],
+        ),
+      )
+
+      return h('div', null,
+        tabBar,
+        error ? h(Banner, { tone: 'error' }, error) : null,
+        notice ? h(Banner, null, notice) : null,
+        operation ? h(Card, { title: '进行中' }, h(OperationProgress, { operation: operation })) : null,
+        status.lastError ? h(Banner, { tone: 'error' }, status.lastError) : null,
+        statusCard,
+        h('div', { className: 'cb-form-row', style: { marginBottom: 10 } },
+          h('button', { type: 'button', className: 'cb-btn primary', disabled: saving, onClick: function () { saveConfig().catch(function () {}) } }, saving ? '保存中…' : '保存配置'),
+          h('span', { className: 'cb-card-sub' }, 'memory sub-system 的 embedding 推理配置'),
+        ),
+        h(Card, { title: 'Embedding 方案', sub: 'embedding service 配置' },
+          h(ConfigSelect, {
+            label: '模式',
+            value: embedding.mode,
+            options: [['remote', '远端 embedding service'], ['llama', 'llama.cpp 本地推理']],
+            onChange: function (value) { update(['embedding', 'mode'], value) },
+          }),
+          embedding.mode === 'remote'
+            ? h('div', null,
+                h(ConfigText, { label: 'Base URL', value: embedding.remote.baseUrl, placeholder: 'https://...', onChange: function (value) { update(['embedding', 'remote', 'baseUrl'], value) } }),
+                h(ConfigText, { label: 'Model', value: embedding.remote.model, onChange: function (value) { update(['embedding', 'remote', 'model'], value) } }),
+                h(ConfigText, { label: 'Embeddings path', value: embedding.remote.path, onChange: function (value) { update(['embedding', 'remote', 'path'], value) } }),
+                h(ConfigText, { label: 'API Key', type: 'password', value: embedding.remote.apiKey, placeholder: embedding.remote.hasApiKey ? '已设置，留空保持不变' : '可留空', onChange: function (value) { update(['embedding', 'remote', 'apiKey'], value) } }),
+                h(ConfigNumber, { label: 'Batch size', value: embedding.remote.batchSize, min: 1, max: 512, onChange: function (value) { update(['embedding', 'remote', 'batchSize'], value) } }),
+              )
+            : h('div', null,
+                h('div', { className: 'cb-section-label' }, 'llama.cpp 运行时'),
+                h('div', { className: 'cb-card-sub', style: { marginBottom: 4, whiteSpace: 'normal' } },
+                  status.installed ? '已安装：' + status.llama.build + ' / ' + status.llama.backend : '尚未安装 llama.cpp 运行时',
+                ),
+                !status.installed
+                  ? h('div', null,
+                      h(ConfigSelect, {
+                        label: '推理设备',
+                        value: backend,
+                        options: assets.map(function (asset) {
+                          var note = asset.recommended ? ' · 推荐' : ''
+                          if (asset.installable === false) note = ' · 需驱动 CUDA ≥' + asset.minCuda
+                          return [asset.backend, asset.label + ' · ' + formatBytes(asset.size) + note]
+                        }),
+                        onChange: selectBackend,
+                      }),
+                      h('div', { className: 'cb-card-sub', style: { marginTop: 4, whiteSpace: 'normal' } },
+                        '找不到目标版本？尝试更新你的显卡驱动。' + (status.deviceCudaVersion ? ' 当前 CUDA ' + status.deviceCudaVersion : ''),
+                      ),
+                      h('div', { className: 'cb-form-row' },
+                        h('button', { type: 'button', className: 'cb-btn', disabled: actionBusy || operation !== null, onClick: installRuntime }, actionBusy ? '处理中…' : '安装 llama.cpp'),
+                      ),
+                    )
+                  : null,
+                h('div', { className: 'cb-card-sub', style: { marginTop: 4, whiteSpace: 'normal' } },
+                  '选择 GPU 时会优先把模型放到显卡；CPU 模式只使用处理器。需要更细的参数控制时可展开高级设置。',
+                ),
+                h('label', { className: 'cb-checkbox', style: { marginTop: 8 } },
+                  h('input', {
+                    type: 'checkbox',
+                    checked: embedding.llama.autoStart === true,
+                    onChange: function (event) { update(['embedding', 'llama', 'autoStart'], event.target.checked) },
+                  }),
+                  '随插件自动启动 llama.cpp 本地推理',
+                ),
+                h('div', { className: 'cb-card-sub wrap', style: { marginTop: 6 } },
+                  '启动 / 停止 / 重启服务请到「运行状态」页操作。',
+                ),
+                h('div', { className: 'cb-section-label' }, 'GGUF 模型'),
+                h('div', { className: 'cb-form-row' },
+                  h('input', {
+                    className: 'cb-input',
+                    value: embedding.llama.model,
+                    spellCheck: false,
+                    placeholder: '选择下方模型，或 browse 本地 .gguf 文件',
+                    onChange: function (event) { update(['embedding', 'llama', 'model'], event.target.value) },
+                    onBlur: function (event) { inspectModelPath(event.target.value) },
+                  }),
+                  h('button', { type: 'button', className: 'cb-btn', onClick: openBrowse }, 'Browse'),
+                ),
+                h('div', { className: 'cb-card-sub wrap', style: { marginTop: 4 } },
+                  '选择或输入 GGUF 后会自动读取模型元信息（不加载模型）；读取失败时保持当前维度/context。',
+                ),
+                browseOpen
+                  ? h('div', { className: 'cb-banner', style: { marginTop: 8 } },
+                      h('div', { className: 'cb-form-row' },
+                        h('input', {
+                          className: 'cb-input',
+                          value: browsePath,
+                          spellCheck: false,
+                          onChange: function (event) { setBrowsePath(event.target.value) },
+                          onKeyDown: function (event) { if (event.key === 'Enter') loadBrowse(browsePath) },
+                        }),
+                        h('button', { type: 'button', className: 'cb-btn', onClick: function () { loadBrowse(browsePath) } }, '打开'),
+                        browseData && browseData.parent
+                          ? h('button', { type: 'button', className: 'cb-btn ghost', onClick: function () { loadBrowse(browseData.parent) } }, '上一级')
+                          : null,
+                        h('button', { type: 'button', className: 'cb-btn ghost', onClick: function () { setBrowseOpen(false) } }, '关闭'),
+                      ),
+                      browseData
+                        ? h('div', { style: { marginTop: 6 } },
+                            h('div', { className: 'cb-section-label' }, '目录'),
+                            (browseData.dirs || []).map(function (dir) {
+                              return h('div', { className: 'cb-list-row', key: dir.path },
+                                h('div', { className: 'cb-list-main' },
+                                  h('button', { type: 'button', className: 'cb-btn ghost', onClick: function () { loadBrowse(dir.path) } }, '📁 ' + dir.name),
+                                ),
+                              )
+                            }),
+                            h('div', { className: 'cb-section-label' }, 'GGUF 文件'),
+                            (browseData.files || []).length === 0
+                              ? h('div', { className: 'cb-empty' }, '当前目录没有 .gguf')
+                              : (browseData.files || []).map(function (file) {
+                                  return h('div', { className: 'cb-list-row', key: file.path },
+                                    h('div', { className: 'cb-list-main' },
+                                      h('button', { type: 'button', className: 'cb-btn ghost', onClick: function () { chooseModelFile(file) } }, file.name),
+                                      h('span', { className: 'cb-card-sub' }, formatBytes(file.size)),
+                                    ),
+                                  )
+                                }),
+                          )
+                        : h('div', { className: 'cb-empty' }, '加载目录…'),
+                    )
+                  : null,
+                h('div', { className: 'cb-section-label' }, '推荐模型（按显存/内存选择）'),
+                h('div', { className: 'cb-card-sub', style: { marginBottom: 4, whiteSpace: 'normal' } },
+                  '从推荐列表，或 Browse 到同名 GGUF 选择会自动带出维度、context、pooling；其他自定义 GGUF 保持当前值。',
+                ),
+                h('div', { className: 'cb-banner', style: { display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' } },
+                  h('button', { type: 'button', className: 'cb-btn primary', onClick: askDshForModel }, '让 AI 帮我配置 llama.cpp'),
+                  h('span', { className: 'cb-card-sub wrap', style: { flex: '1 1 180px' } }, '打开新对话并填入请求，发送后 AI 接手；会带上当前设备与候选模型'),
+                ),
+                models.map(function (model) {
+                  var selected = embedding.llama.model === model.path
+                  var sizeLabel = model.size < 300 * 1024 * 1024 ? '轻量' : model.size < 800 * 1024 * 1024 ? '中量' : '重量'
+                  return h('div', { className: 'cb-list-row', key: model.id },
+                    h('div', { className: 'cb-list-main', style: { display: 'block' } },
+                      h('div', null,
+                        h('span', { className: 'cb-code' }, model.name),
+                        ' ',
+                        h(Chip, { tone: selected ? 'ok' : null }, selected ? '已选择' : sizeLabel),
+                      ),
+                      h('div', { className: 'cb-card-sub wrap' },
+                        model.params + ' · ' + model.dimensions + ' dim · ctx ' + (model.contextSize || '?') + (model.maxContext && model.maxContext !== model.contextSize ? '/' + model.maxContext : '') + ' · ' + formatBytes(model.size) + ' · ' + model.note,
+                      ),
+                    ),
+                    h('div', { className: 'cb-list-side' },
+                      !model.downloaded
+                        ? h('button', { type: 'button', className: 'cb-btn', disabled: actionBusy || operation !== null, onClick: function () { downloadModel(model) } }, '下载')
+                        : h('button', { type: 'button', className: 'cb-btn', disabled: actionBusy, onClick: function () { useModel(model) } }, '使用'),
+                    ),
+                  )
+                }),
+              ),
+          h('details', { style: { marginTop: 8 } },
+            h('summary', { style: { cursor: 'pointer', fontSize: 12, opacity: 0.8 } }, '高级设置'),
+            h('div', { style: { marginTop: 6 } },
+              h(ConfigNumber, { label: '向量维度 dimensions', value: embedding.dimensions, min: 1, max: 4096, hint: '从模型列表选择会自动带出；2000 起存 halfvec，4000 以上只索引前 4000 维', onChange: function (value) { update(['embedding', 'dimensions'], value) } }),
+              h('div', { className: 'cb-card-sub wrap' },
+                '存储策略：' + embeddingStorageStrategy(embedding.dimensions),
+              ),
+              h('div', { className: 'cb-card-sub wrap', style: { marginTop: 2 } },
+                '索引策略：' + embeddingIndexStrategy(embedding.dimensions),
+              ),
+              embedding.mode === 'llama'
+                ? h('div', null,
+                    h(ConfigNumber, { label: 'GPU layers', value: embedding.llama.gpuLayers, min: 0, max: 999, hint: 'GPU 默认尽量全部放到显卡；CPU 运行时忽略此值', onChange: function (value) { update(['embedding', 'llama', 'gpuLayers'], value) } }),
+                    h(ConfigSelect, { label: 'Pooling', value: embedding.llama.pooling, options: ['mean', 'cls', 'last'], onChange: function (value) { update(['embedding', 'llama', 'pooling'], value) } }),
+                    h('div', { className: 'cb-field-grid' },
+                      h(ConfigNumber, { label: 'Context', value: embedding.llama.contextSize, min: 128, max: 1048576, hint: '从模型列表选择会自动带出', onChange: function (value) { update(['embedding', 'llama', 'contextSize'], value) } }),
+                      h(ConfigNumber, { label: '端口', value: embedding.llama.port, min: 1, max: 65535, onChange: function (value) { update(['embedding', 'llama', 'port'], value) } }),
+                    ),
+                  )
+                : null,
+            ),
+          ),
+        ),
+        h(Card, {
+          title: '设备',
+          sub: devices && devices.recommended ? '推荐 ' + devices.recommended : '检测中',
+          right: h('button', { type: 'button', className: 'cb-btn ghost', onClick: function () { loadDevices().then(function () { setNotice('设备信息已刷新') }) } }, '刷新'),
+        },
+          devices
+            ? h('div', null,
+                h(KV, { label: 'CPU' }, devices.cpu.model + ' · ' + devices.cpu.cores + ' cores'),
+                devices.gpus && devices.gpus.length > 0
+                  ? devices.gpus.map(function (gpu, index) {
+                      return h(KV, { key: 'gpu-' + index, label: 'GPU ' + (index + 1) }, gpu.name + (gpu.memory ? ' · ' + gpu.memory : ''))
+                    })
+                  : h('div', { className: 'cb-empty' }, '未检测到 GPU'),
+                h(KV, { label: '可用后端' }, (devices.backends || []).join(', ')),
+                h(KV, { label: 'CUDA' }, devices.cudaVersion || '—'),
+                h(KV, { label: '驱动' }, devices.driverVersion || '—'),
+              )
+            : h('div', { className: 'cb-empty' }, '设备检测中…'),
+        ),
+      )
+    }
+
+    function ConfigSheetPage() {
+      var includeSecretsState = useState(false)
+      var includeSecrets = includeSecretsState[0]
+      var setIncludeSecrets = includeSecretsState[1]
+      var importTextState = useState('')
+      var importText = importTextState[0]
+      var setImportText = importTextState[1]
+      var previewState = useState(null)
+      var preview = previewState[0]
+      var setPreview = previewState[1]
+      var errorState = useState('')
+      var error = errorState[0]
+      var setError = errorState[1]
+      var noticeState = useState('')
+      var notice = noticeState[0]
+      var setNotice = noticeState[1]
+      var exportingState = useState(false)
+      var exporting = exportingState[0]
+      var setExporting = exportingState[1]
+      var previewingState = useState(false)
+      var previewing = previewingState[0]
+      var setPreviewing = previewingState[1]
+      var applyingState = useState(false)
+      var applying = applyingState[0]
+      var setApplying = applyingState[1]
+
+      function exportConfig() {
+        setExporting(true)
+        setError('')
+        setNotice('')
+        configRequest('/config/export?secrets=' + (includeSecrets ? '1' : '0'))
+          .then(function (value) {
+            downloadJson('claybot-config-' + Date.now() + '.json', value)
+            setNotice(includeSecrets ? '配置单已导出（含明文密钥）' : '配置单已导出（密钥已脱敏）')
+          })
+          .catch(function (failure) { setError(failure.message) })
+          .then(function () { setExporting(false) })
+      }
+
+      function readImportFile(event) {
+        var file = event.target.files && event.target.files[0]
+        if (!file) return
+        file.text()
+          .then(function (text) {
+            setImportText(text)
+            setPreview(null)
+            setNotice('已读取配置单，请预览导入')
+          })
+          .catch(function (failure) { setError(failure.message) })
+        event.target.value = ''
+      }
+
+      function parseImportText() {
+        try {
+          return JSON.parse(importText)
+        } catch (failure) {
+          throw new Error('配置单 JSON 无效：' + (failure instanceof Error ? failure.message : String(failure)))
+        }
+      }
+
+      function previewImport() {
+        setPreviewing(true)
+        setError('')
+        setNotice('')
+        try {
+          var sheet = parseImportText()
+          configRequest('/config/import', { method: 'POST', body: { sheet: sheet, apply: false } })
+            .then(function (value) {
+              setPreview(value)
+              setNotice(value.changes.length === 0 ? '配置无变化' : '预览完成，确认后应用')
+            })
+            .catch(function (failure) { setError(failure.message) })
+            .then(function () { setPreviewing(false) })
+        } catch (failure) {
+          setError(failure.message)
+          setPreviewing(false)
+        }
+      }
+
+      function applyImport() {
+        setApplying(true)
+        setError('')
+        setNotice('')
+        try {
+          var sheet = parseImportText()
+          configRequest('/config/import', { method: 'POST', body: { sheet: sheet, apply: true } })
+            .then(function (value) {
+              setPreview(value)
+              setNotice('配置已导入')
+            })
+            .catch(function (failure) { setError(failure.message) })
+            .then(function () { setApplying(false) })
+        } catch (failure) {
+          setError(failure.message)
+          setApplying(false)
+        }
+      }
+
+      return h('div', null,
+        error ? h(Banner, { tone: 'error' }, error) : null,
+        notice ? h(Banner, null, notice) : null,
+        h(Card, { title: '配置单', sub: 'memory subsystem 基础设施 · JSON' },
+          h('div', { className: 'cb-card-sub', style: { marginBottom: 8, whiteSpace: 'normal' } },
+            '只包含 memory 基础设施：数据库版本/备份目录、embedding、设备偏好；不含 agent LLM 配置。',
+          ),
+          h('label', { className: 'cb-checkbox' },
+            h('input', { type: 'checkbox', checked: includeSecrets, onChange: function (event) { setIncludeSecrets(event.target.checked) } }),
+            '导出时包含明文 API Key',
+          ),
+          h('div', { className: 'cb-form-row' },
+            h('button', { type: 'button', className: 'cb-btn', disabled: exporting, onClick: exportConfig }, exporting ? '导出中…' : '导出配置单'),
+            h('input', { className: 'cb-file', type: 'file', accept: '.json,application/json', onChange: readImportFile }),
+          ),
+          h('div', { className: 'cb-card-sub', style: { marginTop: 6, whiteSpace: 'normal' } },
+            '默认导出会脱敏 API Key；导入时留空的 Key 保持现有值；数据库版本不匹配只提示，不自动升级。',
+          ),
+          h('textarea', {
+            className: 'cb-textarea',
+            style: { minHeight: 120, marginTop: 8 },
+            spellCheck: false,
+            placeholder: '粘贴配置单 JSON，或选择文件…',
+            value: importText,
+            onChange: function (event) { setImportText(event.target.value); setPreview(null) },
+          }),
+          h('div', { className: 'cb-form-row' },
+            h('button', { type: 'button', className: 'cb-btn', disabled: previewing, onClick: previewImport }, previewing ? '预览中…' : '预览导入'),
+            h('button', { type: 'button', className: 'cb-btn primary', disabled: applying || preview === null, onClick: applyImport }, applying ? '应用中…' : '应用导入'),
+          ),
+          preview
+            ? h('div', null,
+                h('div', { className: 'cb-section-label' }, '变更'),
+                preview.changes.length === 0
+                  ? h('div', { className: 'cb-empty' }, '无变化')
+                  : preview.changes.map(function (change) {
+                      return h('div', { className: 'cb-list-row', key: change.path },
+                        h('div', { className: 'cb-list-main' },
+                          h('span', { className: 'cb-code' }, change.path),
+                          h('span', { className: 'cb-card-sub' }, String(change.from) + ' → ' + String(change.to)),
+                        ),
+                      )
+                    }),
+                preview.warnings && preview.warnings.length > 0
+                  ? h('div', { style: { marginTop: 8 } },
+                      h('div', { className: 'cb-section-label' }, '提示'),
+                      preview.warnings.map(function (warning, index) {
+                        return h('div', { className: 'cb-card-sub', key: index, style: { whiteSpace: 'normal' } }, warning)
+                      }),
+                    )
+                  : null,
+              )
+            : null,
+        ),
+      )
+    }
+
     function ComponentsPage() {
       var dataState = useState(null)
       var data = dataState[0]
@@ -1090,8 +2628,10 @@ window.__ModuleLoader__.load({
       var tabs = [
         ['overview', '概览'],
         ['database', '数据库'],
+        ['embedding', '嵌入服务'],
         ['spaces', '记忆空间'],
         ['maintenance', '维护'],
+        ['config', '配置'],
       ]
       return h('div', null,
         h('div', { className: 'cb-tabs' }, tabs.map(function (item) {
@@ -1102,10 +2642,12 @@ window.__ModuleLoader__.load({
             onClick: function () { setTab(item[0]) },
           }, item[1])
         })),
-        tab === 'database' ? h(DatabasePage) : null,
         tab === 'overview' ? h(Placeholder, { title: '记忆概览', description: '记忆条目、召回与维护状态（M2）' }) : null,
+        tab === 'database' ? h(DatabasePage) : null,
+        tab === 'embedding' ? h(EmbeddingPage) : null,
         tab === 'spaces' ? h(Placeholder, { title: '记忆空间', description: '记忆空间与条目浏览（M2）' }) : null,
         tab === 'maintenance' ? h(Placeholder, { title: '维护', description: '衰减、重嵌、人格维护（M2）' }) : null,
+        tab === 'config' ? h(ConfigSheetPage) : null,
       )
     }
 
@@ -1143,6 +2685,7 @@ window.__ModuleLoader__.load({
     }
 
     function apply(ctx) {
+      clientCtx = ctx
       ctx.effect(function () {
         var disposeTab = ctx.sidebarRightTabs.register({
           id: 'dsh-claybot',
